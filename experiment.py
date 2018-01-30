@@ -1,0 +1,43 @@
+import avsr
+import os
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
+
+def main():
+
+    experiment = avsr.AVSR(
+        unit='viseme',
+        video_processing='resnet_cnn',
+        cnn_filters=(16, 32, 64),
+        cnn_dense_units=128,
+        video_train_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords/aligned/roi_rgb_36_train.tfrecord',
+        video_test_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords/aligned/roi_rgb_36_test.tfrecord',
+        audio_processing='features',
+        audio_train_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords_2018/mfcc_train.tfrecord',
+        audio_test_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords_2018/mfcc_test.tfrecord',
+        labels_train_record = '/run/media/john_tukey/download/datasets/tcdtimit/tfrecords/visemes_train.tfrecord',
+        labels_test_record = '/run/media/john_tukey/download/datasets/tcdtimit/tfrecords/visemes_test.tfrecord',
+        # labels_train_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords/characters_train.tfrecord',
+        # labels_test_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords/characters_test.tfrecord',
+        encoder_type='unidirectional',
+        decoding_algorithm='beam_search',
+        encoder_units_per_layer=(128, 128,),
+        decoder_units_per_layer=(256, ),
+        batch_size=(32, 32),
+        learning_rate=0.001,
+    )
+
+    experiment.train(
+        num_epochs=41,
+        logfile='./logs/a_only',
+        try_restore_latest_checkpoint=True
+    )
+
+    # corr, acc = experiment.evaluate(
+    #     checkpoint_path='./checkpoints/a_only/checkpoint.ckp-10',
+    #     epoch=69,
+    # )
+    # print('Accuracy: {}'.format(acc))
+
+
+if __name__ == '__main__':
+    main()
