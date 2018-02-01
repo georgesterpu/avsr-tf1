@@ -1,6 +1,7 @@
+*.pyc
 /checkpoints/*
 /logs/*
 /predictions/*
 /.idea/*
 /pyVSR/*
-*.pyc
+**/*.pyc
