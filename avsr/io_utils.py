@@ -77,16 +77,16 @@ def _parse_labels_function(example, unit):
     return labels, labels_length, context_parsed["filename"]
 
 
-def make_iterator_from_one_record(data_record, label_record, batch_size, shuffle=False, reverse_input=False, bucket_width=-1):
+def make_iterator_from_one_record(data_record, label_record, batch_size, shuffle=False, reverse_input=False, bucket_width=-1, num_cores=8):
 
     input_shape, content_type = _get_input_shape_from_record(data_record)
     unit = _get_unit_from_record(label_record)
 
     dataset1 = tf.data.TFRecordDataset(data_record)
-    dataset1 = dataset1.map(lambda proto: _parse_input_function(proto, input_shape, content_type))
+    dataset1 = dataset1.map(lambda proto: _parse_input_function(proto, input_shape, content_type),num_parallel_calls=num_cores)
 
     dataset2 = tf.data.TFRecordDataset(label_record)
-    dataset2 = dataset2.map(lambda proto: _parse_labels_function(proto, unit))
+    dataset2 = dataset2.map(lambda proto: _parse_labels_function(proto, unit), num_parallel_calls=num_cores)
 
     dataset = tf.data.Dataset.zip((dataset1, dataset2))
 
@@ -122,6 +122,8 @@ def make_iterator_from_one_record(data_record, label_record, batch_size, shuffle
         dataset = tf.data.Dataset.apply(dataset, tf.contrib.data.group_by_window(
             key_func=key_func, reduce_func=reduce_func, window_size=batch_size))
 
+    dataset = dataset.prefetch(num_cores)
+
     iterator = dataset.make_initializable_iterator()
     (inputs, inputs_len, fname1), (labels, labels_len, fname2) = iterator.get_next()
 
@@ -136,29 +138,30 @@ def make_iterator_from_one_record(data_record, label_record, batch_size, shuffle
     )
 
 
-def make_iterator_from_two_records(video_record, audio_record, label_record, batch_size, shuffle=False, reverse_input=False, bucket_width=-1):
+def make_iterator_from_two_records(video_record, audio_record, label_record, batch_size, shuffle=False, reverse_input=False, bucket_width=-1, num_cores=8):
     # TODO: this function needs a generalisation to lists of data records
 
     unit = _get_unit_from_record(label_record)
 
     vid_input_shape, content_type = _get_input_shape_from_record(video_record)
     vid_dataset = tf.data.TFRecordDataset(video_record)
-    vid_dataset = vid_dataset.map(lambda proto: _parse_input_function(proto, vid_input_shape, content_type))
+    vid_dataset = vid_dataset.map(lambda proto: _parse_input_function(proto, vid_input_shape, content_type), num_parallel_calls=num_cores)
 
     aud_input_shape, content_type = _get_input_shape_from_record(audio_record)
     aud_dataset = tf.data.TFRecordDataset(audio_record)
-    aud_dataset = aud_dataset.map(lambda proto: _parse_input_function(proto, aud_input_shape, content_type))
+    aud_dataset = aud_dataset.map(lambda proto: _parse_input_function(proto, aud_input_shape, content_type), num_parallel_calls=num_cores)
 
     dataset1 = tf.data.Dataset.zip((vid_dataset, aud_dataset))
 
     dataset2 = tf.data.TFRecordDataset(label_record)
-    dataset2 = dataset2.map(lambda proto: _parse_labels_function(proto, unit))
+    dataset2 = dataset2.map(lambda proto: _parse_labels_function(proto, unit), num_parallel_calls=num_cores)
 
     dataset = tf.data.Dataset.zip((dataset1, dataset2))
 
     if shuffle is True:
         dataset = dataset.shuffle(buffer_size=1000)
 
+    # TODO (cba, two stacked lists of inputs)
     # if reverse_input is True:
     #     dataset = dataset.map(
     #         lambda d1a, d1b, d1c, d2a, d2b, d2c: (tf.reverse(d1a, axis=[0]), d1b, d1c, d2a, d2b, d2c),
@@ -188,6 +191,7 @@ def make_iterator_from_two_records(video_record, audio_record, label_record, bat
         dataset = tf.data.Dataset.apply(dataset, tf.contrib.data.group_by_window(
             key_func=key_func, reduce_func=reduce_func, window_size=batch_size))
 
+    dataset = dataset.prefetch(num_cores)
     iterator = dataset.make_initializable_iterator()
     ((vid_inputs, vid_inputs_len, vid_fname1), (aud_inputs, aud_inputs_len, aud_fname1)), (labels, labels_len, fname2) = iterator.get_next()
 
