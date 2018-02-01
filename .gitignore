@@ -3,3 +3,4 @@
 /predictions/*
 /.idea/*
 /pyVSR/*
+*.pyc
