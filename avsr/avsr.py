@@ -48,6 +48,7 @@ class AVSR(object):
                  dropout_probability=(0.9, 0.9, 0.9),
                  embedding_size=0,
                  sampling_probability_outputs=0.1,
+                 label_skipping=False,
                  decoding_algorithm='beam_search',
                  beam_width=4,
                  optimiser='Adam',
@@ -93,6 +94,7 @@ class AVSR(object):
             dropout_probability=dropout_probability,
             embedding_size=embedding_size,
             sampling_probability_outputs=sampling_probability_outputs,
+            label_skipping=label_skipping,
             decoding_algorithm=decoding_algorithm,
             beam_width=beam_width,
             use_ctc=False,
@@ -169,6 +171,9 @@ class AVSR(object):
                 while True:
                     out = self._train_session.run([self._train_model.model.train_op,
                                                    self._train_model.model.batch_loss,
+                                                   self._train_model.model._decoder._labels,
+                                                   self._train_model.model._decoder._labels_padded_GO,
+                                                   self._train_model.model._decoder._labels_len,
                                                    ], )
 
                     sum_loss += out[1]

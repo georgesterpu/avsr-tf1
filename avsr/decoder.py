@@ -38,8 +38,13 @@ class Seq2SeqDecoder(object):
                                                          dtype=self._hparams.dtype)
         self._vocab_size = len(hparams.unit_dict) - 1  # excluding END
 
+        self._global_step = tf.Variable(0, trainable=False, name='global_step')
+
         # create model
         self._infer_num_valid_streams()
+        if self._hparams.label_skipping is True and mode == 'train':
+            # self._labels_len2 = self._labels_len
+            self._labels, self._labels_len = self._label_skipping()
         self._add_special_symbols()
         self._init_embedding()
         self._construct_decoder_initial_state()
@@ -57,6 +62,32 @@ class Seq2SeqDecoder(object):
             raise Exception('We are totally blind and deaf here...')
 
         self._num_streams = num_streams
+
+    def _label_skipping(self):
+
+        bs, ts = tf.unstack(tf.shape(self._labels))
+
+        def expand_fnc(x):
+            import numpy as np
+            lst = np.array((), dtype=np.int32)
+            for idx in np.arange(np.size(x)):
+                r = np.arange(x[idx], dtype=np.int32)
+                lst = np.append(lst, r)
+            return lst
+
+        bool_table = tf.not_equal(self._labels, self._global_step % 11 + 1)
+        good_indices = tf.cast(tf.where(bool_table), dtype=tf.int32)
+        good_values = tf.gather_nd(self._labels, good_indices)
+        y1, y2, cnt = tf.unique_with_counts(good_indices[:, 0])
+
+        newidx = tf.py_func(expand_fnc, [cnt], tf.int32)
+        pair = tf.stack((good_indices[:, 0], newidx), axis=1)
+
+        added_elems = ts - cnt
+        new_labels = tf.scatter_nd(pair, good_values, tf.shape(self._labels))
+        new_labels_lens = self._labels_len - added_elems
+
+        return new_labels, new_labels_lens
 
     def _add_special_symbols(self):
         batch_size, sequence_len = tf.unstack(tf.shape(self._labels))
@@ -134,11 +165,20 @@ class Seq2SeqDecoder(object):
             audio_state = tuple([LSTMStateTuple(c=zero_slice[0], h=zero_slice[1]) for _ in range(len(self._hparams.encoder_units_per_layer))])
 
         state_tuples = []
-        for i in range(len(video_state)):
+
+        if len(self._hparams.encoder_units_per_layer) == 1:
+            video_state = (video_state, )
+            audio_state = (audio_state, )
+
+        for i in range(len(self._hparams.encoder_units_per_layer)):
             cat_c = tf.concat((video_state[i].c, audio_state[i].c), axis=-1)
             cat_h = tf.concat((video_state[i].h, audio_state[i].h), axis=-1)
             state_tuples.append(LSTMStateTuple(c=cat_c, h=cat_h))
+
         state_tuples = tuple(state_tuples)
+
+        if len(self._hparams.encoder_units_per_layer) == 1:
+            state_tuples = state_tuples[0]
 
         if len(self._hparams.decoder_units_per_layer) != len(self._hparams.encoder_units_per_layer):
             self._decoder_initial_state = state_tuples[-1]
@@ -446,9 +486,13 @@ class Seq2SeqDecoder(object):
             lengths=self._labels_len,
             dtype=self._hparams.dtype
         )
-
         # self._loss_weights = tf.multiply(self._loss_weights, self._loss_weights2)
 
+        if self._hparams.label_skipping is True and self._mode == 'train':
+            # diff = tf.shape(self._labels)[-1] - tf.shape(self._loss_weights)[-1]
+            self._labels = self._labels[:,:tf.shape(self._loss_weights)[-1]]
+
+        # self._labels = tf.Print(self._labels, [diff], summarize=1000)
         self.batch_loss = seq2seq.sequence_loss(
             logits=self._decoder_train_outputs.rnn_output,
             targets=self._labels,
@@ -506,7 +550,8 @@ class Seq2SeqDecoder(object):
             update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
             with tf.control_dependencies(update_ops):
                 self.train_op = optimiser.apply_gradients(
-                    zip(gradients, variables))
+
+                    zip(gradients, variables), global_step=tf.train.get_global_step())
         else:
             self.train_op = optimiser.apply_gradients(
                 zip(gradients, variables))

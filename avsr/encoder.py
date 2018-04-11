@@ -66,7 +66,8 @@ class Seq2SeqEncoder(object):
                     parallel_iterations=self._hparams.batch_size[0 if self._mode == 'train' else 1],
                     swap_memory=False,
                     dtype=self._hparams.dtype,
-                    scope=scope)
+                    scope=scope,
+                    )
                 # self._encoder_final_state = self._encoder_final_state[-1]
 
             elif self._hparams.encoder_type == 'bidirectional':
