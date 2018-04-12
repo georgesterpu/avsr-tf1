@@ -2,8 +2,11 @@ import tensorflow as tf
 
 
 def batch_norm_relu(inputs, is_training, data_format):
+  """Performs a batch normalization followed by a ReLU."""
+  # We set fused=True for a significant performance boost. See
+  # https://www.tensorflow.org/performance/performance_guide#common_fused_ops
   inputs = tf.layers.batch_normalization(
-      inputs=inputs, axis=1 if data_format == 'channels_first' else 3,
+      inputs=inputs, axis=1 if data_format == 'channels_first' else -1,
       epsilon=1e-5, momentum=0.98,
       center=True, scale=True, training=is_training, fused=True)
   inputs = tf.nn.relu(inputs)
@@ -17,42 +20,104 @@ def fc_as_conv(inputs, kernel, filters):
             kernel_size=kernel,
             padding='valid',
             use_bias=False,
-            #activation=tf.nn.relu,
-            kernel_initializer=tf.variance_scaling_initializer(),
+            activation=tf.nn.relu,
+            kernel_initializer=tf.variance_scaling_initializer(scale=2.0, mode='fan_in'),
+            kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.001),
+        )
+
+def fc_as_conv_3d(inputs, kernel, filters):
+    return tf.layers.conv3d(
+            inputs=inputs,
+            filters=filters,
+            kernel_size=kernel,
+            padding='valid',
+            use_bias=False,
+            activation=tf.nn.relu,
+            kernel_initializer=tf.variance_scaling_initializer(scale=2.0, mode='fan_in'),
             kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.0001),
         )
 
 
-def conv2d_wrapper(inputs, filters, kernel_size, strides, data_format):
+def conv2d_wrapper(inputs, filters, kernel_size, strides, data_format, padding='same'):
     return tf.layers.conv2d(
         inputs=inputs,
         filters=filters,
         kernel_size=kernel_size,
         strides=strides,
-        padding='same',
+        padding=padding,
         use_bias=False,
-        kernel_initializer=tf.variance_scaling_initializer(scale=2),
-        kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.0001),
+        kernel_initializer=tf.variance_scaling_initializer(scale=2.0, mode='fan_in'),
+        kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.001),
         data_format=data_format,
     )
 
 
-def projection_shortcut(inputs, filters, strides, data_format):
-    return conv2d_wrapper(inputs, filters, (1, 1), strides, data_format)
+def conv3d_wrapper(inputs, filters, kernel_size, strides, data_format, padding='same'):
+    return tf.layers.conv3d(
+        inputs=inputs,
+        filters=filters,
+        kernel_size=kernel_size,
+        strides=strides,
+        padding=padding,
+        data_format=data_format,
+        use_bias=False,
+        kernel_initializer=tf.variance_scaling_initializer(scale=2.0, mode='fan_in'),
+        kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.0001),
+    )
 
 
-def residual_block(inputs, filters, kernel_size, strides, data_format, is_training, project_shortcut=False):
+def projection_shortcut(inputs, filters, strides, data_format, padding='same'):
+    return conv2d_wrapper(inputs, filters, (1, 1), strides, data_format, padding=padding)
 
+def projection_shortcut_3d(inputs, filters, strides, data_format, padding='same'):
+    return conv3d_wrapper(inputs, filters, (1, 1, 1), strides, data_format, padding=padding)
+
+
+def residual_block(inputs, filters, kernel_size, strides, data_format, is_training, project_shortcut=False, skip_bn=False):
+    r"""
+    Each residual block contains two convolutions, performing the function:
+    output = projection(input) + conv2(conv1(inputs))
+    Parameters
+    ----------
+    inputs
+    filters
+    kernel_size
+    strides
+    data_format
+    is_training
+    project_shortcut
+
+    Returns
+    -------
+
+    """
     shortcut = inputs
 
-    inputs = batch_norm_relu(inputs, is_training, data_format)
+    if skip_bn is False:
+        inputs = batch_norm_relu(inputs, is_training, data_format)
 
     if project_shortcut is True:
-        shortcut = projection_shortcut(inputs, filters, strides, data_format)
+        shortcut = projection_shortcut(shortcut, filters, strides, data_format)
 
     inputs = conv2d_wrapper(inputs, filters, kernel_size, strides, data_format)
     inputs = batch_norm_relu(inputs, is_training, data_format)
     inputs = conv2d_wrapper(inputs, filters, kernel_size, 1, data_format)
+
+    return inputs + shortcut
+
+
+def residual_block_3d(inputs, filters, kernel_size, strides, data_format, is_training, project_shortcut=False, skip_bn=False):
+    shortcut = inputs
+
+    if skip_bn is False:
+        inputs = batch_norm_relu(inputs, is_training, data_format)
+
+    if project_shortcut is True:
+        shortcut = projection_shortcut_3d(shortcut, filters, strides, data_format)
+
+    inputs = conv3d_wrapper(inputs, filters, kernel_size, strides, data_format)
+    inputs = batch_norm_relu(inputs, is_training, data_format)
+    inputs = conv3d_wrapper(inputs, filters, kernel_size, 1, data_format)
 
     return inputs + shortcut
 
@@ -86,7 +151,7 @@ def my_2d_cnn():
 
         # conv_flat = tf.contrib.layers.flatten(layer_output)
 
-        final = fc_as_conv(flow, [9, 9], cnn_dense_units)
+        final = fc_as_conv(flow, flow.get_shape().as_list()[1:-1], cnn_dense_units)
         final = tf.squeeze(final, axis=[1,2])
 
         return final
@@ -99,14 +164,32 @@ def my_resnet_cnn():
     def model(inputs, is_training, cnn_dense_units, cnn_filters):
         data_format = 'channels_last'
 
+        # random_flip = lambda img: tf.image.random_flip_left_right(img, seed=1001)
+        # random_contrast = lambda img: tf.image.random_contrast(img, lower=0.8, upper=1.2, seed=1002)
+        # random_brightness = lambda img: tf.image.random_brightness(img, max_delta=0.2, seed=1003)
+        # random_hue = lambda img: tf.image.random_hue(img, max_delta=0.2, seed=1004)
+        # random_sat = lambda img: tf.image.random_saturation(img, lower=0.8, upper=1.2, seed=1005)
+        #
+        # if is_training is True:
+        #     inputs = tf.map_fn(lambda img:
+        #                        random_flip(img),
+        #                            random_sat(
+        #                                random_hue(
+        #                                    random_brightness(
+        #                                        random_contrast(img))))),
+        #                        inputs, back_prop=False, parallel_iterations=64)
+
         flow = (inputs * 2) - 1
 
-        flow = conv2d_wrapper(flow, cnn_filters[0], (3, 3), 1, data_format)
+        flow = conv2d_wrapper(flow, cnn_filters[0], (3, 3), 1, data_format=data_format)
+        flow = batch_norm_relu(flow, is_training, data_format)
 
-        flow = residual_block(flow, cnn_filters[0], (3, 3), 1, data_format, is_training, project_shortcut=False)
+        flow = residual_block(flow, cnn_filters[0], (3, 3), 1, data_format, is_training, project_shortcut=False, skip_bn=True)
 
         for layer_id, num_filters in enumerate(cnn_filters[1:]):
-            flow = residual_block(flow, num_filters, (3, 3), 2, data_format, is_training, project_shortcut=True)
+            flow = residual_block(flow, num_filters, (3, 3), (2, 2), data_format, is_training, project_shortcut=True)
+            # flow = residual_block(flow, num_filters, (3, 3), 1, data_format, is_training, project_shortcut=False)
+            # flow = residual_block(flow, num_filters, (3, 3), 1, data_format, is_training, project_shortcut=False)
 
         final = fc_as_conv(flow, flow.get_shape().as_list()[1:-1], cnn_dense_units)
         final = tf.squeeze(final, axis=[1, 2])
@@ -121,30 +204,20 @@ def my_3d_cnn():
     def model(inputs, is_training, cnn_dense_units, cnn_filters):
         data_format = 'channels_last'
         # inputs = tf.transpose(inputs, [0, 4, 1, 2, 3])
-        conv = inputs
+        flow = (inputs * 2) - 1
 
-        for layer, num_filters in enumerate(cnn_filters):
-            conv = tf.layers.conv3d(
-                conv,
-                filters=num_filters,
-                kernel_size=[5, 4, 4] if layer==0 else (1,3,3),
-                strides=(1,1,1) if layer==0 else (1, 2, 2),
-                padding='valid',
-                activation=tf.nn.relu,
-                use_bias=True,
-                bias_initializer=tf.variance_scaling_initializer(),
-                kernel_initializer=tf.variance_scaling_initializer(),
-                # kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.01),
-                data_format=data_format,
-            )
-            conv = tf.layers.dropout(conv, rate=0.1, training=is_training)
+        flow = conv3d_wrapper(flow, cnn_filters[0], (1, 3, 3), (1, 1, 1), data_format)
+        flow = batch_norm_relu(flow, is_training, data_format)
 
-        bs, ts, _, _, _ = tf.unstack(tf.shape(conv))
-        _, _, w, h, f = conv.get_shape()
-        conv4_flat = tf.reshape(conv, [bs*ts, w*h*f])
-        final = tf.layers.dense(conv4_flat, cnn_dense_units, activation=None)
+        flow = residual_block_3d(flow, cnn_filters[0], (3, 3, 3), 1, data_format, is_training, project_shortcut=False,
+                              skip_bn=True)
 
-        final = tf.reshape(final, [bs, ts, cnn_dense_units])
+        for layer_id, num_filters in enumerate(cnn_filters[1:]):
+            flow = residual_block_3d(flow, num_filters, (3, 3, 3), (1, 2, 2), data_format, is_training, project_shortcut=True)
+            # flow = residual_block(flow, num_filters, (3, 3), 1, data_format, is_training, project_shortcut=False)
+
+        final = fc_as_conv_3d(flow,[1] + flow.get_shape().as_list()[2:-1], cnn_dense_units)
+        final = tf.squeeze(final, axis=[2, 3])
 
         return final
 
@@ -157,7 +230,7 @@ def cnn_layers(inputs, cnn_type, is_training, cnn_filters, cnn_dense_units=128):
     bs, ts, _, _, _ = tf.unstack(tf.shape(inputs))
     _, _, height, width, chans = inputs.get_shape().as_list()
 
-    if cnn_type == 'resnet_cnn':
+    if cnn_type == 'resnet':
         inputs = tf.reshape(inputs, shape=[-1, int(height), int(width), int(chans)])
         model = my_resnet_cnn()
         outputs = model(inputs, is_training=is_training, cnn_dense_units=cnn_dense_units, cnn_filters=cnn_filters)
