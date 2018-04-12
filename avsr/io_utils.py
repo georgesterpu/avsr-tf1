@@ -91,7 +91,7 @@ def make_iterator_from_one_record(data_record, label_record, batch_size, shuffle
     dataset = tf.data.Dataset.zip((dataset1, dataset2))
 
     if shuffle is True:
-        dataset = dataset.shuffle(buffer_size=1000)
+        dataset = dataset.shuffle(buffer_size=5000)
 
     if reverse_input is True:
         dataset = dataset.map(
@@ -151,6 +151,7 @@ def make_iterator_from_two_records(video_record, audio_record, label_record, bat
     aud_dataset = tf.data.TFRecordDataset(audio_record)
     aud_dataset = aud_dataset.map(lambda proto: _parse_input_function(proto, aud_input_shape, content_type), num_parallel_calls=num_cores)
 
+    # Why did I zip these two before zipping with the labels ?
     dataset1 = tf.data.Dataset.zip((vid_dataset, aud_dataset))
 
     dataset2 = tf.data.TFRecordDataset(label_record)
@@ -159,7 +160,7 @@ def make_iterator_from_two_records(video_record, audio_record, label_record, bat
     dataset = tf.data.Dataset.zip((dataset1, dataset2))
 
     if shuffle is True:
-        dataset = dataset.shuffle(buffer_size=1000)
+        dataset = dataset.shuffle(buffer_size=5000)
 
     # TODO (cba, two stacked lists of inputs)
     # if reverse_input is True:
@@ -193,12 +194,12 @@ def make_iterator_from_two_records(video_record, audio_record, label_record, bat
 
     dataset = dataset.prefetch(num_cores)
     iterator = dataset.make_initializable_iterator()
-    ((vid_inputs, vid_inputs_len, vid_fname1), (aud_inputs, aud_inputs_len, aud_fname1)), (labels, labels_len, fname2) = iterator.get_next()
+    ((vid_inputs, vid_inputs_len, vid_fname1), (aud_inputs, aud_inputs_len, aud_fname1)), (labels, labels_len, labels_fname2) = iterator.get_next()
 
     return BatchedData(
         initializer=iterator.initializer,
         filename=(vid_fname1, aud_fname1),
-        filename2=fname2,
+        filename2=labels_fname2,
         inputs=(vid_inputs, aud_inputs),
         inputs_len=(vid_inputs_len, aud_inputs_len),
         labels=labels,

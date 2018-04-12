@@ -8,39 +8,30 @@ def main():
     experiment = avsr.AVSR(
         unit='viseme',
         video_processing='resnet_cnn',
-        cnn_filters=(16, 32, 64),
+        cnn_filters=(8, 16, 24, 32),
         cnn_dense_units=128,
-        video_train_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords/aligned/roi_rgb_36_train.tfrecord',
-        video_test_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords/aligned/roi_rgb_36_test.tfrecord',
-        # video_train_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords_icassp2018/dct_train_v3.tfrecord',
-        # video_test_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords_icassp2018/dct_test_v3.tfrecord',
+        video_train_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords2/rgb36lips_train_sd.tfrecord',
+        video_test_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords2/rgb36lips_test_sd.tfrecord',
         audio_processing='features',
-        audio_train_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords_2018/mfcc_train.tfrecord',
-        audio_test_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords_2018/mfcc_test.tfrecord',
-        labels_train_record = '/run/media/john_tukey/download/datasets/tcdtimit/tfrecords/visemes_train.tfrecord',
-        labels_test_record = '/run/media/john_tukey/download/datasets/tcdtimit/tfrecords/visemes_test.tfrecord',
-        # labels_train_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords/characters_train.tfrecord',
-        # labels_test_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords/characters_test.tfrecord',
+        audio_train_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords2/logmel_train_sd.tfrecord',
+        audio_test_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords2/logmel_test_sd.tfrecord',
+        labels_train_record = '/run/media/john_tukey/download/datasets/tcdtimit/tfrecords2/visemes_train_sd.tfrecord',
+        labels_test_record = '/run/media/john_tukey/download/datasets/tcdtimit/tfrecords2/visemes_test_sd.tfrecord',
         encoder_type='unidirectional',
         decoding_algorithm='beam_search',
         encoder_units_per_layer=(128, 128, ),
         decoder_units_per_layer=(256, ),
-        batch_size=(32, 32),
+        batch_size=(32, 64),
         learning_rate=0.001,
         label_skipping=False,
     )
 
     experiment.train(
         num_epochs=401,
-        logfile='./logs/test_iter_data',
+        logfile='./logs/new',
         try_restore_latest_checkpoint=False
     )
 
-    # corr, acc = experiment.evaluate(
-    #     checkpoint_path='./checkpoints/a_only/checkpoint.ckp-10',
-    #     epoch=69,
-    # )
-    # print('Accuracy: {}'.format(acc))
 
 
 if __name__ == '__main__':

@@ -1,14 +1,12 @@
 import tensorflow as tf
 import collections
 from .io_utils import make_iterator_from_one_record, create_unit_dict, make_iterator_from_two_records
-from pyVSR.pyVSR.utils import write_sequences_to_mlf
 from .video import cnn_layers
 from .audio import process_audio
 from .seq2seq import Seq2SeqModel
 import time
 from os import makedirs, path
-from .utils import compute_wer
-from pyVSR.pyVSR.Learn.htk import compute_results3
+from .utils import compute_wer, write_sequences_to_labelfile
 
 
 class Data(collections.namedtuple("Data", ("inputs", "inputs_length", "inputs_filenames",
@@ -33,7 +31,7 @@ class AVSR(object):
                  labels_train_record=None,
                  labels_test_record=None,
                  batch_size=(32, 32),
-                 cnn_filters=(16, 32, 64),
+                 cnn_filters=(8, 16, 24, 32),
                  cnn_dense_units=128,
                  batch_normalisation=True,
                  input_dense_layers=(0,),
@@ -171,9 +169,6 @@ class AVSR(object):
                 while True:
                     out = self._train_session.run([self._train_model.model.train_op,
                                                    self._train_model.model.batch_loss,
-                                                   self._train_model.model._decoder._labels,
-                                                   self._train_model.model._decoder._labels_padded_GO,
-                                                   self._train_model.model._decoder._labels_len,
                                                    ], )
 
                     sum_loss += out[1]
@@ -186,16 +181,18 @@ class AVSR(object):
             print('epoch time: {}'.format(time.time() - start))
             f.write('Average batch_loss as epoch {} is {}\n'.format(epoch, sum_loss / batches))
             f.flush()
-            if (epoch) % 10 == 0:
+
+            if (epoch) % 1 == 0:
                 save_path = self._train_model.model.saver.save(
                     sess=self._train_session,
                     save_path=checkpoint_path,
                     global_step=epoch,
                 )
 
-                result = self.evaluate(save_path, epoch)
-                f.write('Test set Accuracy: {:.2f}%\n'.format(result[-1]))
-                f.flush()
+                error_rate = self.evaluate(save_path, epoch)
+                for (k, v) in error_rate.items():
+                    f.write(k + ': {:.4f}% '.format(v * 100))
+                f.write('\n'); f.flush()
 
         f.close()
 
@@ -207,11 +204,12 @@ class AVSR(object):
         self._evaluate_session.run([stream.iterator_initializer for stream in self._evaluate_model.data
                                      if stream is not None])
         predictions_dict = {}
+        labels_dict = {}
 
         session_outputs = [self._evaluate_model.model._decoder.inference_predicted_ids,
-                           # self._evaluate_model.data[0].inputs_filenames,
-                           self._evaluate_model.data[1].labels_filenames,]
-                           # self._evaluate_model.data[1].inputs_filenames]
+                           self._evaluate_model.data[0].labels,
+                           self._evaluate_model.data[0].inputs_filenames,
+                           self._evaluate_model.data[0].labels_filenames,]
 
         if self._write_attention_alignment is True:
             session_outputs.append(self._evaluate_model.model.attention_summary)
@@ -222,43 +220,44 @@ class AVSR(object):
                 out = self._evaluate_session.run(session_outputs)
 
                 # debug time
-                # assert (any(list(out[1] == out[2])))
+                assert (any(list(out[2] == out[3])))
                 # assert (any(list(out[1] == out[3])))
 
                 if self._write_attention_alignment is True:
                     imag_summ = tf.Summary()
-                    imag_summ.ParseFromString(out[3])
+                    imag_summ.ParseFromString(out[-1])
 
-                for idx in range(len(out[1])):  # could use batch_size here, but take care with the last smaller batch
-                    ids = out[0][idx]
-                    symbs = [self._unit_dict[sym] for sym in ids]
+                for idx in range(len(out[2])):  # could use batch_size here, but take care with the last smaller batch
+                    predicted_ids = out[0][idx]
+                    predicted_symbs = [self._unit_dict[sym] for sym in predicted_ids]
 
-                    file = out[1][idx].decode('utf-8')
+                    labels_ids = out[1][idx]
+                    labels_symbs = [self._unit_dict[sym] for sym in labels_ids]
+
+                    file = out[2][idx].decode('utf-8')
 
                     if self._write_attention_alignment is True:
                         makedirs(alignments_outdir, exist_ok=True)
                         with tf.gfile.GFile(path.join(alignments_outdir, file + '.png'), mode='w') as img_f:
                             img_f.write(imag_summ.value[idx].image.encoded_image_string)
 
-                    predictions_dict[file] = symbs
+                    predictions_dict[file] = predicted_symbs
+                    labels_dict[file] = labels_symbs
 
             except tf.errors.OutOfRangeError:
                 break
 
-        # wer = compute_wer(predictions_dict)
+        uer = compute_wer(predictions_dict, labels_dict)
+        error_rate = {self._unit: uer}
+        if self._unit == 'character':
+            wer = compute_wer(predictions_dict, labels_dict, split_words=True)
+            error_rate['word'] = wer
 
         outdir = path.join('predictions', path.split(path.split(checkpoint_path)[0])[-1])
         makedirs(outdir, exist_ok=True)
-        write_sequences_to_mlf(predictions_dict, path.join(outdir, 'predicted_epoch_{}.mlf'.format(epoch)))
+        write_sequences_to_labelfile(predictions_dict, path.join(outdir, 'predicted_epoch_{}.mlf'.format(epoch)))
 
-        try:
-            corr, acc = compute_results3(
-                predicted_labels=path.join(outdir, 'predicted_epoch_{}.mlf'.format(epoch)),
-                unit=self._unit)
-        except:
-            corr, acc = 0.0, 0.0
-
-        return corr, acc
+        return error_rate
 
     def _create_graphs(self):
         self._train_graph = tf.Graph()
@@ -299,6 +298,7 @@ class AVSR(object):
 
             initializer = tf.global_variables_initializer()
 
+            # Returning the original data, not the processed features
             return Model(data=(video_data, audio_data),
                          model=model,
                          initializer=initializer,
@@ -347,7 +347,6 @@ class AVSR(object):
             iterator_initializer=iterator.initializer)
 
         return video_data, audio_data
-
 
     def _fetch_data(self, mode, batch_size):
 
@@ -403,8 +402,8 @@ class AVSR(object):
                     inputs=video_data.inputs,
                     cnn_type=self._video_processing,
                     is_training=(mode=='train'),
-                    cnn_filters = self._hparams_video.cnn_filters,
-                    cnn_dense_units = self._hparams_video.cnn_dense_units
+                    cnn_filters=self._hparams_video.cnn_filters,
+                    cnn_dense_units=self._hparams_video.cnn_dense_units
                 )
 
                 # re-create video_data to update the `inputs` field

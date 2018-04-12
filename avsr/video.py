@@ -230,13 +230,13 @@ def cnn_layers(inputs, cnn_type, is_training, cnn_filters, cnn_dense_units=128):
     bs, ts, _, _, _ = tf.unstack(tf.shape(inputs))
     _, _, height, width, chans = inputs.get_shape().as_list()
 
-    if cnn_type == 'resnet':
+    if cnn_type == 'resnet_cnn':
         inputs = tf.reshape(inputs, shape=[-1, int(height), int(width), int(chans)])
         model = my_resnet_cnn()
         outputs = model(inputs, is_training=is_training, cnn_dense_units=cnn_dense_units, cnn_filters=cnn_filters)
 
         outputs = tf.reshape(outputs, [bs, ts, cnn_dense_units])  # unwrap
-    elif cnn_type == '2dconv':
+    elif cnn_type == '2dconv_cnn':
 
         with tf.device('/gpu:0'):
             inputs = tf.reshape(inputs, shape=[bs * ts, int(height), int(width), int(chans)])  # wrap
@@ -244,12 +244,12 @@ def cnn_layers(inputs, cnn_type, is_training, cnn_filters, cnn_dense_units=128):
             outputs = model(inputs, is_training=is_training, cnn_filters=cnn_filters, cnn_dense_units=cnn_dense_units)
             outputs = tf.reshape(outputs, [bs, ts, cnn_dense_units])  # unwrap
 
-    elif cnn_type == '3dconv':
+    elif cnn_type == '3dconv_cnn':
         with tf.device('/gpu:0'):
             model = my_3d_cnn()
             outputs = model(inputs, is_training=is_training, cnn_dense_units=cnn_dense_units, cnn_filters=cnn_filters)
     else:
-        raise Exception('undefined CNN, did you mean `resnet` ?')
+        raise Exception('undefined CNN, did you mean `resnet_cnn` ?')
 
 
     return outputs
