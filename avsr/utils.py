@@ -1,14 +1,16 @@
-from pyVSR.pyVSR.tcdtimit.files import read_all_sentences_labels
 
 
-def compute_wer(predictions_dict):
-
-    ground_truths = read_all_sentences_labels(predictions_dict.keys())
-
+def compute_wer(predictions_dict, ground_truth_dict, split_words=False):
     wer = 0
     for fname, prediction in predictions_dict.items():
         prediction = _strip_extra_chars(prediction)
-        wer += levenshtein(ground_truths[fname], prediction) / float(len(ground_truths[fname]))
+        ground_truth = _strip_extra_chars(ground_truth_dict[fname])
+
+        if split_words is True:
+            prediction = ''.join(prediction).split()
+            ground_truth = ''.join(ground_truth).split()
+
+        wer += levenshtein(ground_truth, prediction) / float(len(ground_truth))
 
     return wer / float(len(predictions_dict))
 
@@ -37,4 +39,16 @@ def levenshtein(ground_truth, prediction):
 
 
 def _strip_extra_chars(prediction):
-    return [value for value in prediction if value not in ('EOS', 'END')]
+    return [value for value in prediction if value not in ('EOS', 'END', 'MASK')]
+
+
+def write_sequences_to_labelfile(sequence_dict, fname):
+    items = []
+    for (k, v) in sequence_dict.items():
+        label_str = ''.join(_strip_extra_chars(v)) + '\n'
+        items.append(' '.join([k, label_str]))
+
+    with open(fname, 'w') as f:
+        f.writelines(items)
+
+    del items
