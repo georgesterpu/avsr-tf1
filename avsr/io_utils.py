@@ -1,8 +1,5 @@
 import tensorflow as tf
 import collections
-from pyVSR.pyVSR.utils import read_htk_file, read_hdf5_file, read_wav_file, file_to_feature
-from pyVSR.pyVSR.vsrmath import accurate_derivative
-from pyVSR.pyVSR.tcdtimit.files import read_sentence_labels, viseme_list, phoneme_list, character_list
 from .audio import process_audio
 import numpy as np
 from os import path
@@ -52,7 +49,7 @@ def _parse_input_function(example, input_shape, content_type):
     return sequence_parsed["inputs"], context_parsed["input_length"], context_parsed["filename"]
 
 
-def _parse_labels_function(example, unit):
+def _parse_labels_function(example, unit_dict):
     context_features = {
         "unit": tf.FixedLenFeature(shape=[], dtype=tf.string),
         "labels_length": tf.FixedLenFeature(shape=[], dtype=tf.int64),
@@ -68,8 +65,7 @@ def _parse_labels_function(example, unit):
         sequence_features=sequence_features
     )
 
-    udict = create_unit_dict(unit)
-    ivdict = {v: k for k, v in udict.items()}
+    ivdict = {v: k for k, v in unit_dict.items()}
     labels = tf.concat([sequence_parsed["labels"], [ivdict['EOS']]], axis=0)
 
     labels_length = context_parsed["labels_length"] + 1
@@ -77,16 +73,16 @@ def _parse_labels_function(example, unit):
     return labels, labels_length, context_parsed["filename"]
 
 
-def make_iterator_from_one_record(data_record, label_record, batch_size, shuffle=False, reverse_input=False, bucket_width=-1, num_cores=8):
+def make_iterator_from_one_record(data_record, label_record, unit_dict, batch_size, shuffle=False, reverse_input=False, bucket_width=-1, num_cores=8):
 
     input_shape, content_type = _get_input_shape_from_record(data_record)
-    unit = _get_unit_from_record(label_record)
+    # unit = _get_unit_from_record(label_record)
 
     dataset1 = tf.data.TFRecordDataset(data_record)
     dataset1 = dataset1.map(lambda proto: _parse_input_function(proto, input_shape, content_type),num_parallel_calls=num_cores)
 
     dataset2 = tf.data.TFRecordDataset(label_record)
-    dataset2 = dataset2.map(lambda proto: _parse_labels_function(proto, unit), num_parallel_calls=num_cores)
+    dataset2 = dataset2.map(lambda proto: _parse_labels_function(proto, unit_dict), num_parallel_calls=num_cores)
 
     dataset = tf.data.Dataset.zip((dataset1, dataset2))
 
@@ -138,10 +134,10 @@ def make_iterator_from_one_record(data_record, label_record, batch_size, shuffle
     )
 
 
-def make_iterator_from_two_records(video_record, audio_record, label_record, batch_size, shuffle=False, reverse_input=False, bucket_width=-1, num_cores=8):
+def make_iterator_from_two_records(video_record, audio_record, label_record, batch_size, unit_dict, shuffle=False, reverse_input=False, bucket_width=-1, num_cores=8):
     # TODO: this function needs a generalisation to lists of data records
 
-    unit = _get_unit_from_record(label_record)
+    # unit = _get_unit_from_record(label_record)
 
     vid_input_shape, content_type = _get_input_shape_from_record(video_record)
     vid_dataset = tf.data.TFRecordDataset(video_record)
@@ -155,7 +151,7 @@ def make_iterator_from_two_records(video_record, audio_record, label_record, bat
     dataset1 = tf.data.Dataset.zip((vid_dataset, aud_dataset))
 
     dataset2 = tf.data.TFRecordDataset(label_record)
-    dataset2 = dataset2.map(lambda proto: _parse_labels_function(proto, unit), num_parallel_calls=num_cores)
+    dataset2 = dataset2.map(lambda proto: _parse_labels_function(proto, unit_dict), num_parallel_calls=num_cores)
 
     dataset = tf.data.Dataset.zip((dataset1, dataset2))
 
@@ -243,21 +239,13 @@ def _get_unit_from_record(record):
     return unit.decode('utf-8')
 
 
-def _symbols_to_ints(symbols, unit):
-
-    unit_dict = create_unit_dict(unit)
-    ivdict = {v: k for k, v in unit_dict.items()}
-
-    ints = [ivdict[symbol] for symbol in symbols]
-    # ints.append(ivdict['EOS'])  # EOS is now appended dynamically by the iterator
-    return np.asarray(ints, dtype=np.int32)
-
-
-def create_unit_dict(unit):
+def create_unit_dict(unit_file):
 
     unit_dict = {'MASK': 0, 'END': -1}
 
-    unit_list = _read_unit_file(unit)
+    with open(unit_file, 'r') as f:
+        unit_list = f.read().splitlines()
+
     idx = 0
     for idx, subunit in enumerate(unit_list):
         unit_dict[subunit] = idx + 1
@@ -268,22 +256,6 @@ def create_unit_dict(unit):
     ivdict = {v: k for k, v in unit_dict.items()}
 
     return ivdict
-
-
-def _read_unit_file(unit):
-    if unit == 'viseme':
-        myfile = viseme_list
-    elif unit == 'phoneme':
-        myfile = phoneme_list
-    elif unit == 'character':
-        myfile = character_list
-    else:
-        raise Exception('unallowed unit')
-
-    with open(myfile, 'r') as f:
-        contents = f.read().splitlines()
-
-    return contents
 
 
 def write_dataset(files, content_type, outpath, file_type=None, transformation=None):

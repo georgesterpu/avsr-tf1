@@ -22,6 +22,7 @@ class Model(collections.namedtuple("Model",("data", "model", "initializer", "bat
 class AVSR(object):
     def __init__(self,
                  unit,
+                 unit_file=None,
                  video_processing=None,
                  video_train_record=None,
                  video_test_record=None,
@@ -41,7 +42,7 @@ class AVSR(object):
                  encoder_units_per_layer=(128, 128,),
                  decoder_units_per_layer=(256,),
                  enable_attention=True,
-                 attention_type='scaled_luong',
+                 attention_type=(('scaled_luong',)*1, ('scaled_luong')*1),
                  use_dropout=True,
                  dropout_probability=(0.9, 0.9, 0.9),
                  embedding_size=0,
@@ -59,7 +60,7 @@ class AVSR(object):
                  ):
 
         self._unit = unit
-        self._unit_dict = create_unit_dict(unit)
+        self._unit_dict = create_unit_dict(unit_file=unit_file)
 
         self._video_processing = video_processing
         self._video_train_record = video_train_record
@@ -74,6 +75,7 @@ class AVSR(object):
 
         self._hparams = tf.contrib.training.HParams(
             unit_dict=self._unit_dict,
+            unit_file=unit_file,
             vocab_size=len(self._unit_dict),
             batch_size=batch_size,
             video_processing=video_processing,
@@ -182,7 +184,7 @@ class AVSR(object):
             f.write('Average batch_loss as epoch {} is {}\n'.format(epoch, sum_loss / batches))
             f.flush()
 
-            if (epoch) % 1 == 0:
+            if (epoch) % 5 == 0:
                 save_path = self._train_model.model.saver.save(
                     sess=self._train_session,
                     save_path=checkpoint_path,
@@ -360,6 +362,7 @@ class AVSR(object):
                 audio_record=self._audio_train_record if mode == 'train' else self._audio_test_record,
                 label_record=self._labels_train_record if mode == 'train' else self._labels_test_record,
                 batch_size=batch_size,
+                unit_dict=self._hparams.unit_dict,
                 shuffle=True if mode == 'train' else False,
                 reverse_input=False,
                 bucket_width=15,  # 0.5sec at 30 fps,
