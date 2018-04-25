@@ -181,9 +181,15 @@ class Seq2SeqDecoder(object):
             state_tuples = state_tuples[0]
 
         if len(self._hparams.decoder_units_per_layer) != len(self._hparams.encoder_units_per_layer):
-            self._decoder_initial_state = state_tuples[-1]
+            ## option 1
+            # self._decoder_initial_state = state_tuples[-1]
             # make sure that encoder_units[-1] == decoder_units[0]
             # to make the N layer encoder -> 1 layer decoder arch work
+
+            ## option 2
+
+            self._decoder_initial_state = _project_lstm_state_tuple(
+                state_tuples, num_units=self._hparams.decoder_units_per_layer[0])
         else:
             self._decoder_initial_state = state_tuples
             # make sure that encoder_units[i] == decoder_units[i] for i in num_layers
@@ -215,13 +221,16 @@ class Seq2SeqDecoder(object):
                 self._video_features_len = seq2seq.tile_batch(
                     self._video_features_len, multiplier=self._hparams.beam_width)
 
-            attention_video = self._create_attention_mechanism(
-                num_units=self._hparams.decoder_units_per_layer[-1],
-                memory=self._video_memory,
-                memory_sequence_length=self._video_features_len
-            )
-            mechanisms.append(attention_video)
-            layer_sizes.append(self._hparams.encoder_units_per_layer[-1])
+            for attention_type in self._hparams.attention_type[0]:
+
+                attention_video = self._create_attention_mechanism(
+                    num_units=self._hparams.decoder_units_per_layer[-1],
+                    memory=self._video_memory,
+                    memory_sequence_length=self._video_features_len,
+                    attention_type=attention_type
+                )
+                mechanisms.append(attention_video)
+                layer_sizes.append(self._hparams.decoder_units_per_layer[-1])
 
         if self._audio_memory is not None:
 
@@ -233,13 +242,15 @@ class Seq2SeqDecoder(object):
                 self._audio_features_len = seq2seq.tile_batch(
                     self._audio_features_len, multiplier=self._hparams.beam_width)
 
-            attention_audio = self._create_attention_mechanism(
-                num_units=self._hparams.decoder_units_per_layer[-1],
-                memory=self._audio_memory,
-                memory_sequence_length=self._audio_features_len
-            )
-            mechanisms.append(attention_audio)
-            layer_sizes.append(self._hparams.encoder_units_per_layer[-1])
+            for attention_type in self._hparams.attention_type[1]:
+                attention_audio = self._create_attention_mechanism(
+                    num_units=self._hparams.decoder_units_per_layer[-1],
+                    memory=self._audio_memory,
+                    memory_sequence_length=self._audio_features_len,
+                    attention_type=attention_type
+                )
+                mechanisms.append(attention_audio)
+                layer_sizes.append(self._hparams.decoder_units_per_layer[-1])
 
         return mechanisms, layer_sizes
 
@@ -394,11 +405,12 @@ class Seq2SeqDecoder(object):
         self.inference_predicted_beam = outputs.predicted_ids
 
     def _create_attention_mechanism(self,
+                                    attention_type,
                                     num_units,
                                     memory,
                                     memory_sequence_length):
 
-        if self._hparams.attention_type == 'bahdanau':
+        if attention_type == 'bahdanau':
             attention_mechanism = seq2seq.BahdanauAttention(
                 num_units=num_units,
                 memory=memory,
@@ -406,7 +418,7 @@ class Seq2SeqDecoder(object):
                 normalize=False
             )
             self._output_attention = False
-        elif self._hparams.attention_type == 'normed_bahdanau':
+        elif attention_type == 'normed_bahdanau':
             attention_mechanism = seq2seq.BahdanauAttention(
                 num_units=num_units,
                 memory=memory,
@@ -414,7 +426,7 @@ class Seq2SeqDecoder(object):
                 normalize=True
             )
             self._output_attention = False
-        elif self._hparams.attention_type == 'normed_monotonic_bahdanau':
+        elif attention_type == 'normed_monotonic_bahdanau':
             attention_mechanism = seq2seq.BahdanauMonotonicAttention(
                 num_units=num_units,
                 memory=memory,
@@ -425,14 +437,14 @@ class Seq2SeqDecoder(object):
                 mode='hard' if self._mode != 'train' else 'parallel'
             )
             self._output_attention = False
-        elif self._hparams.attention_type == 'luong':
+        elif attention_type == 'luong':
             attention_mechanism = seq2seq.LuongAttention(
                 num_units=num_units,
                 memory=memory,
                 memory_sequence_length=memory_sequence_length
             )
             self._output_attention = True
-        elif self._hparams.attention_type == 'scaled_luong':
+        elif attention_type == 'scaled_luong':
             attention_mechanism = seq2seq.LuongAttention(
                 num_units=num_units,
                 memory=memory,
@@ -440,7 +452,7 @@ class Seq2SeqDecoder(object):
                 scale=True,
             )
             self._output_attention = True
-        elif self._hparams.attention_type == 'scaled_monotonic_luong':
+        elif attention_type == 'scaled_monotonic_luong':
             attention_mechanism = seq2seq.LuongMonotonicAttention(
                 num_units=num_units,
                 memory=memory,
@@ -537,6 +549,11 @@ class Seq2SeqDecoder(object):
                 learning_rate=self._hparams.learning_rate,
                 momentum=0.9,
                 use_nesterov=False)
+        elif self._hparams.optimiser == 'AMSGrad':
+            from .AMSGrad import AMSGrad
+            optimiser = AMSGrad(
+                learning_rate=self._hparams.learning_rate
+            )
         else:
             raise Exception('Unsupported Optimiser, try Adam')
 
@@ -562,3 +579,20 @@ class Seq2SeqDecoder(object):
         vars = [var for var in tf.trainable_variables() if cell_type + '_' in var.name
                 and not 'bias' in var.name]
         return vars
+
+def _project_lstm_state_tuple(state_tuple, num_units):
+
+    state_proj_layer = Dense(num_units,
+                            name='state_projection',
+                            use_bias=False,
+                            )
+
+    cat_c = tf.concat([state.c for state in state_tuple], axis=-1)
+    cat_h = tf.concat([state.h for state in state_tuple], axis=-1)
+
+    proj_c = state_proj_layer(cat_c)
+    proj_h = state_proj_layer(cat_h)
+
+    projected_state = tf.contrib.rnn.LSTMStateTuple(c=proj_c, h=proj_h)
+
+    return projected_state
