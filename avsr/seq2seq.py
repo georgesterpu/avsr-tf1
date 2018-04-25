@@ -1,6 +1,7 @@
 import tensorflow as tf
 from .encoder import Seq2SeqEncoder
-from .decoder import Seq2SeqDecoder
+from .decoder_bimodal import Seq2SeqBimodalDecoder
+from .decoder_unimodal import Seq2SeqUnimodalDecoder
 # from .avsr import Data
 
 
@@ -70,7 +71,7 @@ class Seq2SeqModel(object):
         if labels is None or labels_length is None:
             raise Exception('labels are None')
 
-        self._decoder = Seq2SeqDecoder(
+        self._decoder = Seq2SeqBimodalDecoder(
             video_output=video_output,
             audio_output=audio_output,
             video_features_len=video_len,
@@ -80,6 +81,14 @@ class Seq2SeqModel(object):
             mode=self._mode,
             hparams=self._hparams
         )
+        # self._decoder = Seq2SeqUnimodalDecoder(
+        #     encoder_output=video_output,
+        #     encoder_features_len=video_len,
+        #     labels=labels,
+        #     labels_length=labels_length,
+        #     mode=self._mode,
+        #     hparams=self._hparams
+        # )
 
         self.train_op = self._decoder.train_op if self._mode == 'train' else None
         self.batch_loss = self._decoder.batch_loss if self._mode == 'train' else None

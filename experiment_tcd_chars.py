@@ -15,8 +15,8 @@ def main():
         video_train_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords2/rgb36lips_train_sd.tfrecord',
         video_test_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords2/rgb36lips_test_sd.tfrecord',
         audio_processing='features',
-        audio_train_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords2/logmel_train_sd_10db.tfrecord',
-        audio_test_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords2/logmel_test_sd_10db.tfrecord',
+        audio_train_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords2/logmel_train_sd.tfrecord',
+        audio_test_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords2/logmel_test_sd.tfrecord',
         labels_train_record = '/run/media/john_tukey/download/datasets/tcdtimit/tfrecords2/characters_train_sd.tfrecord',
         labels_test_record = '/run/media/john_tukey/download/datasets/tcdtimit/tfrecords2/characters_test_sd.tfrecord',
         encoder_type='unidirectional',
@@ -38,7 +38,7 @@ def main():
 
     experiment.train(
         num_epochs=91,
-        logfile='./logs/tcd_sd_characters_wgn_r31_3x256',
+        logfile='./logs/unimodal_decoder',
         try_restore_latest_checkpoint=True
     )
 

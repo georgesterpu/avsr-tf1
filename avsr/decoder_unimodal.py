@@ -6,23 +6,19 @@ from tensorflow.python.ops import array_ops
 from tensorflow.contrib.rnn import LSTMStateTuple
 
 
-class Seq2SeqDecoder(object):
+class Seq2SeqUnimodalDecoder(object):
     def __init__(self,
-                 video_output,
-                 audio_output,
-                 video_features_len,
-                 audio_features_len,
+                 encoder_output,
+                 encoder_features_len,
                  labels,
                  labels_length,
                  mode,
                  hparams):
 
         # member variables
-        self._video_output = video_output
-        self._audio_output = audio_output
+        self._encoder_output = encoder_output
 
-        self._video_features_len = video_features_len
-        self._audio_features_len = audio_features_len
+        self._encoder_features_len = encoder_features_len
 
         self._labels = labels
         self._labels_len = labels_length
@@ -41,53 +37,12 @@ class Seq2SeqDecoder(object):
         self._global_step = tf.Variable(0, trainable=False, name='global_step')
 
         # create model
-        self._infer_num_valid_streams()
-        if self._hparams.label_skipping is True and mode == 'train':
-            # self._labels_len2 = self._labels_len
-            self._labels, self._labels_len = self._label_skipping()
         self._add_special_symbols()
         self._init_embedding()
         self._construct_decoder_initial_state()
         self._prepare_attention_memories()
         self._init_decoder()
 
-    def _infer_num_valid_streams(self):
-        num_streams = 0
-        if self._video_output is not None:
-            num_streams += 1
-        if self._audio_output is not None:
-            num_streams += 1
-
-        if num_streams == 0:
-            raise Exception('We are totally blind and deaf here...')
-
-        self._num_streams = num_streams
-
-    def _label_skipping(self):
-
-        bs, ts = tf.unstack(tf.shape(self._labels))
-
-        def expand_fnc(x):
-            import numpy as np
-            lst = np.array((), dtype=np.int32)
-            for idx in np.arange(np.size(x)):
-                r = np.arange(x[idx], dtype=np.int32)
-                lst = np.append(lst, r)
-            return lst
-
-        bool_table = tf.not_equal(self._labels, self._global_step % 11 + 1)
-        good_indices = tf.cast(tf.where(bool_table), dtype=tf.int32)
-        good_values = tf.gather_nd(self._labels, good_indices)
-        y1, y2, cnt = tf.unique_with_counts(good_indices[:, 0])
-
-        newidx = tf.py_func(expand_fnc, [cnt], tf.int32)
-        pair = tf.stack((good_indices[:, 0], newidx), axis=1)
-
-        added_elems = ts - cnt
-        new_labels = tf.scatter_nd(pair, good_values, tf.shape(self._labels))
-        new_labels_lens = self._labels_len - added_elems
-
-        return new_labels, new_labels_lens
 
     def _add_special_symbols(self):
         batch_size, sequence_len = tf.unstack(tf.shape(self._labels))
@@ -149,108 +104,49 @@ class Seq2SeqDecoder(object):
 
     def _construct_decoder_initial_state(self):
 
-        if self._video_output is not None:
-            video_state = self._video_output.final_state
-        else:
-            zero_slice = [tf.zeros(shape=tf.shape(self._audio_output.final_state[0].c), dtype=self._hparams.dtype)
-                          for _ in range(len(self._audio_output.final_state[0]))]
-
-            video_state = tuple([LSTMStateTuple(c=zero_slice[0], h=zero_slice[1]) for _ in range(len(self._hparams.encoder_units_per_layer))])
-
-        if self._audio_output is not None:
-            audio_state = self._audio_output.final_state
-        else:
-            zero_slice = [tf.zeros(shape=tf.shape(self._video_output.final_state[0].c), dtype=self._hparams.dtype)
-                           for _ in range(len(self._video_output.final_state[0])) ]
-            audio_state = tuple([LSTMStateTuple(c=zero_slice[0], h=zero_slice[1]) for _ in range(len(self._hparams.encoder_units_per_layer))])
-
-        state_tuples = []
-
-        if len(self._hparams.encoder_units_per_layer) == 1:
-            video_state = (video_state, )
-            audio_state = (audio_state, )
-
-        for i in range(len(self._hparams.encoder_units_per_layer)):
-            cat_c = tf.concat((video_state[i].c, audio_state[i].c), axis=-1)
-            cat_h = tf.concat((video_state[i].h, audio_state[i].h), axis=-1)
-            state_tuples.append(LSTMStateTuple(c=cat_c, h=cat_h))
-
-        state_tuples = tuple(state_tuples)
-
-        if len(self._hparams.encoder_units_per_layer) == 1:
-            state_tuples = state_tuples[0]
+        encoder_state = self._encoder_output.final_state
 
         if len(self._hparams.decoder_units_per_layer) != len(self._hparams.encoder_units_per_layer):
             ## option 1
-            # self._decoder_initial_state = state_tuples[-1]
+            self._decoder_initial_state = encoder_state[-1]
             # make sure that encoder_units[-1] == decoder_units[0]
             # to make the N layer encoder -> 1 layer decoder arch work
 
             ## option 2
 
-            self._decoder_initial_state = _project_lstm_state_tuple(
-                state_tuples, num_units=self._hparams.decoder_units_per_layer[0])
+            # self._decoder_initial_state = _project_lstm_state_tuple(
+            #     encoder_state, num_units=self._hparams.decoder_units_per_layer[0])
         else:
-            self._decoder_initial_state = state_tuples
+            self._decoder_initial_state = encoder_state
             # make sure that encoder_units[i] == decoder_units[i] for i in num_layers
             # to make the N layer encoder -> N layer decoder arch work
 
     def _prepare_attention_memories(self):
-        if self._video_output is not None:
-            self._video_memory = self._video_output.outputs
-        else:
-            self._video_memory = None
-
-        if self._audio_output is not None:
-            self._audio_memory = self._audio_output.outputs
-        else:
-            self._audio_memory = None
+        self._encoder_memory = self._encoder_output.outputs
 
     def _create_attention_mechanisms(self, beam_search=False):
 
         mechanisms = []
         layer_sizes = []
 
-        if self._video_memory is not None:
+        if beam_search is True:
+            ## TODO potentially broken, please re-check
+            self._encoder_memory = seq2seq.tile_batch(
+                self._encoder_memory, multiplier=self._hparams.beam_width)
 
-            if beam_search is True:
-                ## TODO potentially broken, please re-check
-                self._video_memory = seq2seq.tile_batch(
-                    self._video_memory, multiplier=self._hparams.beam_width)
+            self._encoder_features_len = seq2seq.tile_batch(
+                self._encoder_features_len, multiplier=self._hparams.beam_width)
 
-                self._video_features_len = seq2seq.tile_batch(
-                    self._video_features_len, multiplier=self._hparams.beam_width)
+        for attention_type in self._hparams.attention_type[0]:
 
-            for attention_type in self._hparams.attention_type[0]:
-
-                attention_video = self._create_attention_mechanism(
-                    num_units=self._hparams.decoder_units_per_layer[-1],
-                    memory=self._video_memory,
-                    memory_sequence_length=self._video_features_len,
-                    attention_type=attention_type
-                )
-                mechanisms.append(attention_video)
-                layer_sizes.append(self._hparams.decoder_units_per_layer[-1])
-
-        if self._audio_memory is not None:
-
-            if beam_search is True:
-                ## TODO potentially broken, please re-check
-                self._audio_memory = seq2seq.tile_batch(
-                    self._audio_memory, multiplier=self._hparams.beam_width)
-
-                self._audio_features_len = seq2seq.tile_batch(
-                    self._audio_features_len, multiplier=self._hparams.beam_width)
-
-            for attention_type in self._hparams.attention_type[1]:
-                attention_audio = self._create_attention_mechanism(
-                    num_units=self._hparams.decoder_units_per_layer[-1],
-                    memory=self._audio_memory,
-                    memory_sequence_length=self._audio_features_len,
-                    attention_type=attention_type
-                )
-                mechanisms.append(attention_audio)
-                layer_sizes.append(self._hparams.decoder_units_per_layer[-1])
+            attention = self._create_attention_mechanism(
+                num_units=self._hparams.decoder_units_per_layer[-1],
+                memory=self._encoder_memory,
+                memory_sequence_length=self._encoder_features_len,
+                attention_type=attention_type
+            )
+            mechanisms.append(attention)
+            layer_sizes.append(self._hparams.decoder_units_per_layer[-1])
 
         return mechanisms, layer_sizes
 
@@ -525,22 +421,6 @@ class Seq2SeqDecoder(object):
                 reg_loss += tf.reduce_sum(reg_variables)
 
         self.batch_loss = self.batch_loss + reg_loss
-
-        if self._hparams.use_ctc is True:
-            projected_encoder_outputs = self._dense_layer.apply(self._encoder_outputs)
-            # self.labels_sparse = ctc_label_dense_to_sparse(self._labels, self._labels_len)
-            idx = tf.where(tf.not_equal(self._labels, 0))
-            self.labels_sparse = tf.SparseTensor(idx, tf.gather_nd(self._labels, idx),
-                                                 tf.shape(self._labels, out_type=tf.int64))
-
-            ctc_loss = tf.reduce_mean(tf.nn.ctc_loss(
-                labels=self.labels_sparse,
-                inputs=projected_encoder_outputs,
-                sequence_length=self._inputs_len,
-                time_major=False,
-            ))
-
-            self.batch_loss = 0.8 * self.batch_loss + 0.2 * ctc_loss
 
         if self._hparams.optimiser == 'Adam':
             optimiser = tf.train.AdamOptimizer(learning_rate=self._hparams.learning_rate, epsilon=1e-8)
