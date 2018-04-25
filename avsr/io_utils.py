@@ -5,9 +5,8 @@ import numpy as np
 from os import path
 
 
-
-audio = tf.constant(0)
-video = tf.constant(1)
+video = tf.constant(0)
+audio = tf.constant(1)
 both = tf.constant(2)
 
 class BatchedData(collections.namedtuple("BatchedData",
@@ -503,9 +502,10 @@ def make_mode_suppressor():
     def suppress(video_feats, audio_feats):
         v = video_feats
         a = audio_feats
-        return tf.cond(tf.equal(dist_3cat_uni.sample(), video),
+        sample = dist_3cat_uni.sample()
+        return tf.cond(tf.equal(sample, video),
                 lambda: (tf.zeros(shape=v.shape, dtype=v.dtype), a),       
-                lambda: tf.cond(tf.equal(dist_3cat_uni.sample(), audio),
+                lambda: tf.cond(tf.equal(sample, audio),
                                 lambda: (v,tf.zeros(shape=a.shape, dtype=a.dtype)),
                                 lambda: (v,a)))
         
