@@ -1,13 +1,14 @@
 import tensorflow as tf
 import collections
 from .io_utils import make_iterator_from_one_record, create_unit_dict, make_iterator_from_two_records
+from .utils import compute_wer, write_sequences_to_labelfile
 from .video import cnn_layers
 from .audio import process_audio
 from .seq2seq import Seq2SeqModel
 import time
 from os import makedirs, path
-from .utils import compute_wer, write_sequences_to_labelfile
-
+from datetime import datetime
+from pprint import pprint
 
 class Data(collections.namedtuple("Data", ("inputs", "inputs_length", "inputs_filenames",
                                            "labels", "labels_length", "labels_filenames",
@@ -52,11 +53,14 @@ class AVSR(object):
                  beam_width=4,
                  optimiser='Adam',
                  learning_rate=0.001,
+                 lr_decay='staircase',
                  clip_gradients=True,
                  max_gradient_norm=1.0,
                  num_gpus=1,
                  write_attention_alignment=False,
-                 dtype=tf.float32
+                 dtype=tf.float32,
+                 suppress_mode=False,
+                 log_file=None
                  ):
 
         self._unit = unit
@@ -70,6 +74,7 @@ class AVSR(object):
         self._audio_test_record = audio_test_record
         self._labels_train_record = labels_train_record
         self._labels_test_record = labels_test_record
+        self._suppress_mode=suppress_mode
 
         self._write_attention_alignment = write_attention_alignment
 
@@ -100,6 +105,7 @@ class AVSR(object):
             use_ctc=False,
             optimiser=optimiser,
             learning_rate=learning_rate,
+            lr_decay=lr_decay,
             clip_gradients=clip_gradients,
             max_gradient_norm=max_gradient_norm,
             num_gpus=num_gpus,
@@ -117,6 +123,8 @@ class AVSR(object):
             num_mel_bins=30,  # 30 > 60 > 80
             num_mfccs=26,  # 26 > 13
         )
+        
+        self._initialize_log(log_file)
 
         self._hparams_video = tf.contrib.training.HParams(
             cnn_filters=cnn_filters,
@@ -132,16 +140,18 @@ class AVSR(object):
         self._train_session.close()
         self._evaluate_session.close()
         self._predict_session.close()
+        self._log_fd.flush()
+        self._log_fd.close()
 
     def train(self,
-              logfile,
               num_epochs=400,
               try_restore_latest_checkpoint=False
               ):
-        checkpoint_dir = path.join('checkpoints', path.split(logfile)[-1])
+        log_file = self._log_fd.name
+        checkpoint_dir = path.join('checkpoints', path.basename(log_file))
         checkpoint_path = path.join(checkpoint_dir, 'checkpoint.ckp')
         makedirs(path.dirname(checkpoint_dir), exist_ok=True)
-        makedirs(path.dirname(logfile), exist_ok=True)
+        #makedirs(path.dirname(logfile), exist_ok=True)
 
         last_epoch = 0
         if try_restore_latest_checkpoint is True:
@@ -155,8 +165,10 @@ class AVSR(object):
             except Exception:
                 print('Could not restore from checkpoint, training from scratch!\n')
 
-        f = open(logfile, 'a')
-
+        uer_best = 100 #can go beyond 100
+        epoch_best = 0
+        save_path = None
+        save_path_best = None
         for current_epoch in range(1, num_epochs):
             epoch = last_epoch + current_epoch
 
@@ -181,10 +193,10 @@ class AVSR(object):
                 pass
 
             print('epoch time: {}'.format(time.time() - start))
-            f.write('Average batch_loss as epoch {} is {}\n'.format(epoch, sum_loss / batches))
-            f.flush()
-
-            if (epoch) % 5 == 0:
+            self._log_fd.write('Average loss at epoch {} is {}\n'.format(epoch, sum_loss / batches))
+            self._log_fd.flush()
+            
+            if (epoch+1) % 10 == 0:
                 save_path = self._train_model.model.saver.save(
                     sess=self._train_session,
                     save_path=checkpoint_path,
@@ -192,11 +204,17 @@ class AVSR(object):
                 )
 
                 error_rate = self.evaluate(save_path, epoch)
-                for (k, v) in error_rate.items():
-                    f.write(k + ': {:.4f}% '.format(v * 100))
-                f.write('\n'); f.flush()
+                if error_rate[self._unit] < uer_best:
+                    uer_best = error_rate[self._unit]
+                    epoch_best = epoch
+                    save_path_best = save_path
+        
+        print('finish time: {:%Y-%m-%d_%H:%M:%S}'.format(datetime.now()))
+        print('best epoch: {:d}'.format(epoch_best))
+        print('checkpoint: ', save_path_best)
+                
+        return uer_best, epoch_best, save_path 
 
-        f.close()
 
     def evaluate(self, checkpoint_path, epoch=None, alignments_outdir='./alignments/tmp/'):
         self._evaluate_model.model.saver.restore(
@@ -208,10 +226,12 @@ class AVSR(object):
         predictions_dict = {}
         labels_dict = {}
 
+        model = self._evaluate_model
+        data = model.data[0] if model.data[0] is not None else model.data[1]
         session_outputs = [self._evaluate_model.model._decoder.inference_predicted_ids,
-                           self._evaluate_model.data[0].labels,
-                           self._evaluate_model.data[0].inputs_filenames,
-                           self._evaluate_model.data[0].labels_filenames,]
+                           data.labels,
+                           data.inputs_filenames,
+                           data.labels_filenames,]
 
         if self._write_attention_alignment is True:
             session_outputs.append(self._evaluate_model.model.attention_summary)
@@ -254,8 +274,14 @@ class AVSR(object):
         if self._unit == 'character':
             wer = compute_wer(predictions_dict, labels_dict, split_words=True)
             error_rate['word'] = wer
+            
+        for (k,v) in error_rate.items():
+            message = '{:4s}: {:.4f}%\n'.format(k, v * 100) 
+            self._log_fd.write(message)
+            self._log_fd.flush()
+            print(message)
 
-        outdir = path.join('predictions', path.split(path.split(checkpoint_path)[0])[-1])
+        outdir = path.join('predictions', path.basename(path.dirname(checkpoint_path)))
         makedirs(outdir, exist_ok=True)
         write_sequences_to_labelfile(predictions_dict, path.join(outdir, 'predicted_epoch_{}.mlf'.format(epoch)))
 
@@ -305,6 +331,34 @@ class AVSR(object):
                          model=model,
                          initializer=initializer,
                          batch_size=batch_size)
+
+    def _initialize_log(self, logfile):
+        time = datetime.now()
+        if logfile is None:
+            name = "{:%Y-%m-%d_%H:%M:%S}".format(time)
+            logfile = path.join('logs', name)
+        makedirs(path.dirname(logfile), exist_ok=True)
+        
+        try:
+            self._log_fd = open(logfile, 'a')
+        except:
+            raise
+        
+        header = '{:=^40}\n'.format(" {:%Y-%m-%d %H:%M:%S} ".format(time))
+        self._log_fd.write(header)
+        self._log_fd.write("Parameters:")
+        pprint(vars(self), self._log_fd)
+        self._log_fd.write("Hyperparameters:")
+        # get all vars in _hparams without '_hparam_types'
+        hp = vars(self._hparams).copy()
+        del hp['_hparam_types']
+        pprint(hp, self._log_fd)
+        self._log_fd.write("Audio Hyperparameters:")
+        # get all vars in _hparams without '_hparam_types'
+        hp = vars(self._hparams_audio).copy()
+        del hp['_hparam_types']
+        pprint(hp, self._log_fd)
+        self._log_fd.flush()
 
     def _parse_iterator(self, iterator):
         inputs = tf.cast(iterator.inputs, dtype=self._hparams.dtype)
@@ -366,6 +420,7 @@ class AVSR(object):
                 shuffle=True if mode == 'train' else False,
                 reverse_input=False,
                 bucket_width=15,  # 0.5sec at 30 fps,
+                suppress=self._suppress_mode
             )
             video_data, audio_data = self._parse_multimodal_iterator(iterator)
 
@@ -375,6 +430,7 @@ class AVSR(object):
                     data_record=self._video_train_record if mode == 'train' else self._video_test_record,
                     label_record=self._labels_train_record if mode == 'train' else self._labels_test_record,
                     batch_size=batch_size,
+                    unit_dict=self._hparams.unit_dict,                    
                     shuffle=True if mode == 'train' else False,
                     reverse_input=False,
                     bucket_width=15,  # 0.5sec at 30 fps
@@ -387,6 +443,7 @@ class AVSR(object):
                     data_record=self._audio_train_record if mode == 'train' else self._audio_test_record,
                     label_record=self._labels_train_record if mode == 'train' else self._labels_test_record,
                     batch_size=batch_size,
+                    unit_dict=self._hparams.unit_dict,
                     shuffle=True if mode == 'train' else False,
                     reverse_input=False,
                     bucket_width=50,  # 0.5 sec at 100 mfcc/sec
