@@ -231,11 +231,12 @@ def cnn_layers(inputs, cnn_type, is_training, cnn_filters, cnn_dense_units=128):
     _, _, height, width, chans = inputs.get_shape().as_list()
 
     if cnn_type == 'resnet_cnn':
-        inputs = tf.reshape(inputs, shape=[-1, int(height), int(width), int(chans)])
-        model = my_resnet_cnn()
-        outputs = model(inputs, is_training=is_training, cnn_dense_units=cnn_dense_units, cnn_filters=cnn_filters)
-
-        outputs = tf.reshape(outputs, [bs, ts, cnn_dense_units])  # unwrap
+        with tf.device('/gpu:0'):
+            inputs = tf.reshape(inputs, shape=[-1, int(height), int(width), int(chans)])
+            model = my_resnet_cnn()
+            outputs = model(inputs, is_training=is_training, cnn_dense_units=cnn_dense_units, cnn_filters=cnn_filters)
+    
+            outputs = tf.reshape(outputs, [bs, ts, cnn_dense_units])  # unwrap
     elif cnn_type == '2dconv_cnn':
 
         with tf.device('/gpu:0'):

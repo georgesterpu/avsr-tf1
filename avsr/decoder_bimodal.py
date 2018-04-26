@@ -15,7 +15,8 @@ class Seq2SeqBimodalDecoder(object):
                  labels,
                  labels_length,
                  mode,
-                 hparams):
+                 hparams,
+                 gpu_id):
 
         # member variables
         self._video_output = video_output
@@ -49,7 +50,7 @@ class Seq2SeqBimodalDecoder(object):
         self._init_embedding()
         self._construct_decoder_initial_state()
         self._prepare_attention_memories()
-        self._init_decoder()
+        self._init_decoder(gpu_id)
 
     def _infer_num_valid_streams(self):
         num_streams = 0
@@ -115,7 +116,7 @@ class Seq2SeqBimodalDecoder(object):
                     initializer=initialiser
                 )
 
-    def _init_decoder(self):
+    def _init_decoder(self, gpu_id=0):
         r"""
                 Instantiates the seq2seq decoder
                 :return:
@@ -129,7 +130,7 @@ class Seq2SeqBimodalDecoder(object):
                 use_dropout=self._hparams.use_dropout,
                 dropout_probability=self._hparams.dropout_probability,
                 mode=self._mode,
-                base_gpu=0  # decoder runs on a single GPU
+                base_gpu=gpu_id  # decoder runs on a single GPU
             )
 
             self._dense_layer = Dense(self._vocab_size,
@@ -542,17 +543,30 @@ class Seq2SeqBimodalDecoder(object):
 
             self.batch_loss = 0.8 * self.batch_loss + 0.2 * ctc_loss
 
+        self._lr_decayed = self._hparams.learning_rate
+        if self._hparams.lr_decay == 'staircase':
+            self._lr_decayed = tf.train.exponential_decay(
+                learning_rate=self._lr_decayed,
+                global_step=self._global_step,
+                decay_steps=992500,
+                decay_rate=0.1,
+                staircase=True
+            )
+        else:
+            raise Exception('unsupported learning rate decay mode')
+        
+        
         if self._hparams.optimiser == 'Adam':
-            optimiser = tf.train.AdamOptimizer(learning_rate=self._hparams.learning_rate, epsilon=1e-8)
+            optimiser = tf.train.AdamOptimizer(learning_rate=self._lr_decayed, epsilon=1e-8)
         elif self._hparams.optimiser == 'Momentum':
             optimiser = tf.train.MomentumOptimizer(
-                learning_rate=self._hparams.learning_rate,
+                learning_rate=self._lr_decayed,
                 momentum=0.9,
                 use_nesterov=False)
         elif self._hparams.optimiser == 'AMSGrad':
             from .AMSGrad import AMSGrad
             optimiser = AMSGrad(
-                learning_rate=self._hparams.learning_rate
+                learning_rate=self._lr_decayed
             )
         else:
             raise Exception('Unsupported Optimiser, try Adam')

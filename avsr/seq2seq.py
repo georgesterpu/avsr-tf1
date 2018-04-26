@@ -79,7 +79,8 @@ class Seq2SeqModel(object):
             labels=labels,
             labels_length=labels_length,
             mode=self._mode,
-            hparams=self._hparams
+            hparams=self._hparams,
+            gpu_id=1 % self._hparams.num_gpus
         )
         # self._decoder = Seq2SeqUnimodalDecoder(
         #     encoder_output=video_output,
