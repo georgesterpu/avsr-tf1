@@ -4,11 +4,6 @@ from .audio import process_audio
 import numpy as np
 from os import path
 
-
-video = tf.constant(0)
-audio = tf.constant(1)
-both = tf.constant(2)
-
 class BatchedData(collections.namedtuple("BatchedData",
                                          ("initializer",
                                           "filename",
@@ -163,7 +158,25 @@ def make_iterator_from_two_records(video_record, audio_record, label_record,
     dataset = tf.data.Dataset.zip((dataset1, dataset2))
 
     if suppress is True:
-        dataset = dataset.map(make_mode_suppressor(), num_parallel_calls=num_cores)
+        dist_3cat_uni = tf.distributions.Categorical(probs=[1./3.,1./3.,1./3.])        
+        video = tf.constant(0)
+        audio = tf.constant(1)
+        both = tf.constant(2)
+        
+        #suppress audio, video or none
+        def suppress(modes, labels):
+            video_feats, audio_feats = modes
+            v,vl,vf = video_feats #feature seq, seq length, file name
+            a,al,af = audio_feats #feature seq, seq length, file name
+            l = labels
+            sample = dist_3cat_uni.sample()
+            return tf.cond(tf.equal(sample, video),
+                    lambda: (((v*0.,vl,vf),(a,al,af)),l),       
+                    lambda: tf.cond(tf.equal(sample, audio),
+                                    lambda: (((v,vl,vf),(a*0.,al,af)),l),
+                                    lambda: (((v,vl,vf),(a,al,af)),l)))
+        
+        dataset = dataset.map(suppress, num_parallel_calls=num_cores)
 
     if shuffle is True:
         dataset = dataset.shuffle(buffer_size=5000)
@@ -467,7 +480,7 @@ def make_video_example(file, frames):
     feature_lists = tf.train.FeatureLists(feature_list=feature_list)
     return tf.train.SequenceExample(feature_lists=feature_lists,
                                     context=context)
-ma
+
 
 def make_label_example(file, labels, unit):
 
@@ -493,24 +506,6 @@ def make_label_example(file, labels, unit):
     return tf.train.SequenceExample(feature_lists=feature_lists,
                                     context=context)
 
-#makes a function with an embedded  uniform 3way categorical distribution
-#which decides whether to keep audio, video or both
-def make_mode_suppressor():
-    dist_3cat_uni = tf.distributions.Categorical(probs=[1./3.,1./3.,1./3.])
-    
-    #suppress audio, video or none
-    def suppress(video_feats, audio_feats):
-        v = video_feats
-        a = audio_feats
-        sample = dist_3cat_uni.sample()
-        return tf.cond(tf.equal(sample, video),
-                lambda: (tf.zeros(shape=v.shape, dtype=v.dtype), a),       
-                lambda: tf.cond(tf.equal(sample, audio),
-                                lambda: (v,tf.zeros(shape=a.shape, dtype=a.dtype)),
-                                lambda: (v,a)))
-        
-    return suppress
-    
 
 
 # Possible feature: decode files on the fly
