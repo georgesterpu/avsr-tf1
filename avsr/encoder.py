@@ -98,9 +98,7 @@ class Seq2SeqEncoder(object):
                     sequence_length=self._inputs_len,
                     dtype=self._hparams.dtype,
                     parallel_iterations=self._hparams.batch_size[0 if self._mode == 'train' else 1],
-                    swap_memory=False,
-                    scope=scope,
-
+                    swap_memory=self._hparams.swap_memory
                 )
 
                 self._encoder_outputs = tf.concat(bi_outputs, -1)
