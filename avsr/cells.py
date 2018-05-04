@@ -1,9 +1,10 @@
 from tensorflow.contrib.rnn import MultiRNNCell,DeviceWrapper, DropoutWrapper, \
     LSTMCell, GRUCell, LSTMBlockCell, UGRNNCell
+from tensorflow.contrib.cudnn_rnn import CudnnCompatibleLSTMCell, CudnnCompatibleGRUCell
 import tensorflow as tf
 
 
-def _build_single_cell(cell_type, num_units, use_dropout, mode, dropout_probability, device=None):
+def _build_single_cell(cell_type, num_units, use_dropout, mode, dropout_probability, device=None, initializer='MSRA'):
     r"""
 
     :param num_units: `int`
@@ -13,11 +14,21 @@ def _build_single_cell(cell_type, num_units, use_dropout, mode, dropout_probabil
         cells = LSTMCell(num_units=num_units,
                          use_peepholes=True,
                          cell_clip=10.0,
-                         initializer=tf.variance_scaling_initializer(),
-
-                         )
+                         initializer=tf.variance_scaling_initializer(),)
+    elif cell_type == 'cudnnlstm':
+        cells = CudnnCompatibleLSTMCell(num_units=num_units,
+                         ).add_variable(
+                            name='variance_scaling_initializer',
+                            shape=[num_units],
+                            initializer=tf.variance_scaling_initializer(),)
+        raise NotImplementedError("Not fully implemented: ", cell_type)        
     elif cell_type == 'gru':
         cells = GRUCell(num_units=num_units,
+                        kernel_initializer=tf.variance_scaling_initializer(),
+                        bias_initializer=tf.variance_scaling_initializer())
+        raise NotImplementedError("Not fully implemented: ", cell_type)
+    elif cell_type == 'cudnngru':
+        cells = CudnnCompatibleGRUCell(num_units=num_units,
                         kernel_initializer=tf.variance_scaling_initializer(),
                         bias_initializer=tf.variance_scaling_initializer())
     elif cell_type == 'ugrnn':
@@ -74,3 +85,12 @@ def build_rnn_layers(
         return cell_list[0]
     else:
         return MultiRNNCell(cell_list)
+    
+def make_initializer(type):
+    if type.casefold() == 'MSRA'.casefold():
+        return tf.variance_scaling_initializer(factor=2.0, mode='FAN_IN', uniform=False)
+    elif type.casefold() in ('glorot'.casefold(), 'xavier'.casefold()):
+        return tf.variance_scaling_initializer(factor=1.0, mode='FAN_IN', uniform=True)
+    elif type.casefold() in ('BVLC'.casefold(), 'Caffe'.casefold()):
+        return tf.variance_scaling_initializer(factor=1.0, mode='FAN_AVG', uniform=True)
+    

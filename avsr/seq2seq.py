@@ -14,6 +14,17 @@ class Seq2SeqModel(object):
         # member variables
         self._video_data = data_sequences[0]
         self._audio_data = data_sequences[1]
+        
+        #in some cases the dict is wrapped in a tuple
+        try:
+            self.attention_type_enc = hparams.attention_type_enc[0]
+        except:
+            self.attention_type_enc = hparams.attention_type_enc
+            
+        try:
+            self.output_attention_enc = hparams.output_attention_enc[0]
+        except:
+            self.output_attention_enc = hparams.output_attention_enc
 
         self._mode = mode
         self._hparams = hparams
@@ -23,27 +34,74 @@ class Seq2SeqModel(object):
         self._init_saver()
 
     def _make_encoders(self):
+
+        #need to make a variable so we can pass a reference
+        #while video output doesn't exist yet
+        #need to fake memory
+        att_memory_audio = None
+        encoder_output_size = self._hparams.encoder_units_per_layer[-1]
+        #only last dim counts, but tf.zeros needs full spec
+        fake_mem = tf.zeros([1, 1, encoder_output_size])
+        #underspecified output shape as dynamic_rnn produces
+        encoder_output_shape = tf.TensorShape([None, None, encoder_output_size])
+
+        #att_memory_audio = tf.Variable(fake_mem)
+        #att_memory_audio.set_shape(encoder_output_shape)
+            
+        #print('att_memory_audio shape ', att_memory_audio.shape)
         if self._video_data is not None:
+
+            if self._audio_data is not None:
+                if (self._hparams.enable_attention_enc is True and
+                    (len(self.attention_type_enc['video']['o2s']) > 0)):
+                        #produce a memory with acceptable size for initing real encoder
+                        att_memory_audio = tf.Variable(fake_mem, name="att_memory_audio")
+                        att_memory_audio.set_shape(encoder_output_shape)
+
             with tf.variable_scope('video'):
                 self._video_encoder = Seq2SeqEncoder(
                     data=self._video_data,
                     mode=self._mode,
                     hparams=self._hparams,
-                    gpu_id=0 % self._hparams.num_gpus
+                    gpu_id=0 % self._hparams.num_gpus,
+                    attention_type=self.attention_type_enc['video'],
+                    output_attention=self.output_attention_enc['video'],
+                    att_memory=att_memory_audio, #fake so far, need rewiring
+                    att_memory_len=self._audio_data.inputs_length
                 )
         else:
             self._video_encoder = None
-
+        #print("made video encoder ")
+                
         if self._audio_data is not None:
             with tf.variable_scope('audio'):
                 self._audio_encoder = Seq2SeqEncoder(
                     data=self._audio_data,
                     mode=self._mode,
                     hparams=self._hparams,
-                    gpu_id=1 % self._hparams.num_gpus
+                    gpu_id=1 % self._hparams.num_gpus,
+                    attention_type=self.attention_type_enc['audio'],
+                    output_attention=self.output_attention_enc['audio'],
+                    att_memory=self._video_encoder.get_data().outputs,
+                    att_memory_len=self._video_data.inputs_length
                 )
+                
+            if self._video_data is not None:
+                try:
+                    #disable shape checking output as is [?,?, num_units[-1]]
+                    #and we inited with [1,1, num_units[-1]]
+                    att_memory_audio.assign(self._audio_encoder.get_data().outputs, validate_shape=False)
+                    #set expected shape
+                    att_memory_audio.set_shape(self._audio_encoder.get_data().outputs.get_shape())
+                except:
+                    att_memory_audio = self._audio_encoder.get_data().outputs
+                
+            att_memory_audio = self._audio_encoder.get_data().outputs
+
         else:
             self._audio_encoder = None
+        #print("made audio encoder ")
+        #print('att_memory_audio shape ', att_memory_audio.shape)
 
     def _make_decoder(self):
 

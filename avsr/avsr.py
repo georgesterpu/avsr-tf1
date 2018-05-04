@@ -9,6 +9,7 @@ import time
 from os import makedirs, path
 from datetime import datetime
 from pprint import pprint
+import traceback
 
 class Data(collections.namedtuple("Data", ("inputs", "inputs_length", "inputs_filenames",
                                            "labels", "labels_length", "labels_filenames",
@@ -32,18 +33,32 @@ class AVSR(object):
                  audio_test_record=None,
                  labels_train_record=None,
                  labels_test_record=None,
-                 batch_size=(32, 32),
-                 cnn_filters=(8, 16, 24, 32),
+                 batch_size=(12, 12),
+                 cnn_filters=(48.0, 96.0, 128.0, 128.0, 192.0),
                  cnn_dense_units=128,
                  batch_normalisation=True,
                  input_dense_layers=(0,),
                  encoder_type='unidirectional',
                  cell_type='lstm',
                  recurrent_regularisation=0.0001,
-                 encoder_units_per_layer=(128, 128,),
+                 encoder_units_per_layer=(256, 256, 256),
+                 decoder_units_per_layer_am = (0,),
                  decoder_units_per_layer=(256,),
                  enable_attention=True,
                  attention_type=(('scaled_luong',)*1, ('scaled_luong')*1),
+                 enable_attention_enc=True,
+                 attention_type_enc={'audio': {
+                                        's2s': (),
+                                        'o2s': ('bahdanau')},
+                                    'video': {
+                                        's2s': (), 
+                                        'o2s': ()}},
+                 attention_output_enc={'audio': {
+                                        's2s': (),
+                                        'o2s': (False)},
+                                    'video': {
+                                        's2s': (), 
+                                        'o2s': (True, True, True)}},
                  use_dropout=True,
                  dropout_probability=(0.9, 0.9, 0.9),
                  embedding_size=0,
@@ -57,6 +72,7 @@ class AVSR(object):
                  clip_gradients=True,
                  max_gradient_norm=1.0,
                  num_gpus=1,
+                 swap_memory=False,
                  write_attention_alignment=False,
                  dtype=tf.float32,
                  suppress_mode=False,
@@ -88,13 +104,19 @@ class AVSR(object):
             max_label_length={'viseme': 65, 'phoneme': 70, 'character': 80}[unit],  # max lens from tcdtimit
             batch_normalisation=batch_normalisation,
             input_dense_layers=input_dense_layers,
+            cnn_filters=cnn_filters,
+            cnn_dense_units=cnn_dense_units,
             encoder_type=encoder_type,
             cell_type=cell_type,
             recurrent_regularisation=recurrent_regularisation,
             encoder_units_per_layer=encoder_units_per_layer,
             decoder_units_per_layer=decoder_units_per_layer,
+            decoder_units_per_layer_am=decoder_units_per_layer_am, 
             enable_attention=enable_attention,
             attention_type=attention_type,
+            enable_attention_enc=enable_attention_enc,
+            attention_type_enc=attention_type_enc,
+            output_attention_enc=attention_output_enc,
             use_dropout=use_dropout,
             dropout_probability=dropout_probability,
             embedding_size=embedding_size,
@@ -108,6 +130,7 @@ class AVSR(object):
             lr_decay=lr_decay,
             clip_gradients=clip_gradients,
             max_gradient_norm=max_gradient_norm,
+            swap_memory=swap_memory,
             num_gpus=num_gpus,
             write_attention_alignment=write_attention_alignment,
             dtype=dtype
@@ -137,6 +160,7 @@ class AVSR(object):
         self._initialize_sessions()
 
     def __del__(self):
+        traceback.print_stack()
         self._train_session.close()
         self._evaluate_session.close()
         self._predict_session.close()
@@ -154,6 +178,11 @@ class AVSR(object):
         #makedirs(path.dirname(logfile), exist_ok=True)
 
         last_epoch = 0
+        
+        msg = 'try_restore_latest_checkpoint is {}\n'.format(
+            try_restore_latest_checkpoint)
+        self._log_fd.write(msg)
+        print(msg)
         if try_restore_latest_checkpoint is True:
             try:
                 latest_ckp = tf.train.latest_checkpoint(checkpoint_dir)
@@ -161,10 +190,17 @@ class AVSR(object):
                 self._train_model.model.saver.restore(
                     sess=self._train_session,
                     save_path=latest_ckp, )
-                print('Restoring checkpoint from epoch {}\n'.format(last_epoch))
-            except Exception:
-                print('Could not restore from checkpoint, training from scratch!\n')
-
+                msg = 'Restoring checkpoint from epoch {}\n'.format(last_epoch)
+                self._log_fd.write(msg)
+                print(msg)
+            except Exception as e:
+                msg = ('Could not restore from checkpoint {},' 
+                       ' training from scratch!\n{}\n')
+                msg = msg.format(checkpoint_path, e)
+                print(msg)
+                self._log_fd.write(msg)
+        self._log_fd.flush()
+        
         uer_best = 100 #can go beyond 100
         epoch_best = 0
         save_path = None
@@ -214,7 +250,13 @@ class AVSR(object):
         print('checkpoint: ', save_path_best)
                 
         return uer_best, epoch_best, save_path 
-
+    
+    def train_profile(self,
+              num_epochs=400,
+              try_restore_latest_checkpoint=False
+              ):
+        with tf.contrib.tfprof.ProfileContext('./tf_prof') as pctx:
+            self.train(num_epochs, try_restore_latest_checkpoint)
 
     def evaluate(self, checkpoint_path, epoch=None, alignments_outdir='./alignments/tmp/'):
         self._evaluate_model.model.saver.restore(
@@ -242,8 +284,7 @@ class AVSR(object):
                 out = self._evaluate_session.run(session_outputs)
 
                 # debug time
-                assert (any(list(out[2] == out[3])))
-                # assert (any(list(out[1] == out[3])))
+                #assert (any(list(out[2] == out[3])))
 
                 if self._write_attention_alignment is True:
                     imag_summ = tf.Summary()
@@ -303,13 +344,14 @@ class AVSR(object):
             batch_size=self._hparams.batch_size[1])
 
     def _create_sessions(self):
-        config = tf.ConfigProto(allow_soft_placement=True)
+        config = tf.ConfigProto(allow_soft_placement=True) ##, log_device_placement=True)
         self._train_session = tf.Session(graph=self._train_graph, config=config)
         self._evaluate_session = tf.Session(graph=self._evaluate_graph, config=config)
         self._predict_session = tf.Session(graph=self._predict_graph, config=config)
 
     def _initialize_sessions(self):
-        self._train_session.run(self._train_model.initializer)
+        run_options = tf.RunOptions(report_tensor_allocations_upon_oom=True)
+        self._train_session.run(self._train_model.initializer, options=run_options)
         self._evaluate_session.run(self._evaluate_model.initializer)
 
     def _make_model(self, graph, mode, batch_size):
@@ -507,7 +549,7 @@ class AVSR(object):
             elif self._audio_processing == 'features':
                 pass
             else:
-                raise Exception('unknown audio content')
+                raise Exception('unknown audio content ',self._audio_processing)
         else:
             pass
 

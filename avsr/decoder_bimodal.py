@@ -1,6 +1,7 @@
 import tensorflow as tf
 from tensorflow.contrib import seq2seq
 from .cells import build_rnn_layers
+from .attention import create_attention_mechanism
 from tensorflow.python.layers.core import Dense
 from tensorflow.python.ops import array_ops
 from tensorflow.contrib.rnn import LSTMStateTuple
@@ -124,22 +125,24 @@ class Seq2SeqBimodalDecoder(object):
 
         with tf.variable_scope("Decoder"):
 
-            self._decoder_cells = build_rnn_layers(
-                cell_type=self._hparams.cell_type,
-                num_units_per_layer=self._hparams.decoder_units_per_layer,
-                use_dropout=self._hparams.use_dropout,
-                dropout_probability=self._hparams.dropout_probability,
-                mode=self._mode,
-                base_gpu=gpu_id  # decoder runs on a single GPU
-            )
-
-            self._dense_layer = Dense(self._vocab_size,
-                                      name='my_dense',
-                                      dtype=self._hparams.dtype)
+            with tf.device('/gpu:{}'.format(gpu_id)):
+                self._decoder_cells = build_rnn_layers(
+                    cell_type=self._hparams.cell_type,
+                    num_units_per_layer=self._hparams.decoder_units_per_layer,
+                    use_dropout=self._hparams.use_dropout,
+                    dropout_probability=self._hparams.dropout_probability,
+                    mode=self._mode,
+                    base_gpu=gpu_id  # decoder runs on a single GPU
+                )
+    
+                self._dense_layer = Dense(self._vocab_size,
+                                          name='my_dense',
+                                          dtype=self._hparams.dtype)
 
             if self._mode == 'train':
                 self._build_decoder_train()
-                self._init_optimiser()
+                with tf.device('/gpu:{}'.format(gpu_id)):
+                    self._init_optimiser()
             else:
                 if self._hparams.decoding_algorithm == 'greedy':
                     self._build_decoder_greedy()
@@ -152,6 +155,11 @@ class Seq2SeqBimodalDecoder(object):
 
         if self._video_output is not None:
             video_state = self._video_output.final_state
+            try:
+                #if it is an AttentionWrapperState, need to get cell_state
+                video_state = video_state.cell_state
+            except:
+                pass
         else:
             zero_slice = [tf.zeros(shape=tf.shape(self._audio_output.final_state[0].c), dtype=self._hparams.dtype)
                           for _ in range(len(self._audio_output.final_state[0]))]
@@ -160,6 +168,12 @@ class Seq2SeqBimodalDecoder(object):
 
         if self._audio_output is not None:
             audio_state = self._audio_output.final_state
+            try:
+                #if it is an AttentionWrapperState, need to get cell_state
+                audio_state = audio_state.cell_state
+            except:
+                pass
+
         else:
             zero_slice = [tf.zeros(shape=tf.shape(self._video_output.final_state[0].c), dtype=self._hparams.dtype)
                            for _ in range(len(self._video_output.final_state[0])) ]
@@ -172,11 +186,23 @@ class Seq2SeqBimodalDecoder(object):
             audio_state = (audio_state, )
 
         for i in range(len(self._hparams.encoder_units_per_layer)):
-            cat_c = tf.concat((video_state[i].c, audio_state[i].c), axis=-1)
-            cat_h = tf.concat((video_state[i].h, audio_state[i].h), axis=-1)
-            state_tuples.append(LSTMStateTuple(c=cat_c, h=cat_h))
+            try:
+                cat_c = tf.concat((video_state[i].c, audio_state[i].c), axis=-1)
+                cat_h = tf.concat((video_state[i].h, audio_state[i].h), axis=-1)
+                state_tuples.append(LSTMStateTuple(c=cat_c, h=cat_h))
+            except:
+                video_state_c, video_state_h = tf.split(video_state[i],
+                                                        num_or_size_splits=2,
+                                                        axis=-1)
+                audio_state_c, audio_state_h = tf.split(audio_state[i],
+                                                        num_or_size_splits=2,
+                                                        axis=-1)
+                cat_c = tf.concat(video_state_c, audio_state_c, -1)
+                cat_h = tf.concat(video_state_h, audio_state_h, -1) 
+                state_tuples.append(tf.concat(cat_c, cat_h))
 
         state_tuples = tuple(state_tuples)
+            
 
         if len(self._hparams.encoder_units_per_layer) == 1:
             state_tuples = state_tuples[0]
@@ -207,10 +233,13 @@ class Seq2SeqBimodalDecoder(object):
         else:
             self._audio_memory = None
 
-    def _create_attention_mechanisms(self, beam_search=False):
+    def _create_attention_mechanisms(self, beam_search=False, num_units=0):
 
         mechanisms = []
         layer_sizes = []
+        
+        num_units = (num_units if num_units > 0 else 
+                    self._hparams.decoder_units_per_layer[-1])
 
         if self._video_memory is not None:
 
@@ -224,14 +253,16 @@ class Seq2SeqBimodalDecoder(object):
 
             for attention_type in self._hparams.attention_type[0]:
 
-                attention_video = self._create_attention_mechanism(
-                    num_units=self._hparams.decoder_units_per_layer[-1],
+                #XXX: is -1 the right assumption? it's the last added layer
+                #i.e. the topmost
+                attention_video, self._output_attention = create_attention_mechanism(
+                    num_units=num_units,
                     memory=self._video_memory,
                     memory_sequence_length=self._video_features_len,
                     attention_type=attention_type
                 )
                 mechanisms.append(attention_video)
-                layer_sizes.append(self._hparams.decoder_units_per_layer[-1])
+                layer_sizes.append(num_units)
 
         if self._audio_memory is not None:
 
@@ -244,66 +275,119 @@ class Seq2SeqBimodalDecoder(object):
                     self._audio_features_len, multiplier=self._hparams.beam_width)
 
             for attention_type in self._hparams.attention_type[1]:
-                attention_audio = self._create_attention_mechanism(
-                    num_units=self._hparams.decoder_units_per_layer[-1],
+                attention_audio, self._output_attention = create_attention_mechanism(
+                    num_units=num_units,
                     memory=self._audio_memory,
                     memory_sequence_length=self._audio_features_len,
                     attention_type=attention_type
                 )
                 mechanisms.append(attention_audio)
-                layer_sizes.append(self._hparams.decoder_units_per_layer[-1])
+                layer_sizes.append(num_units)
 
         return mechanisms, layer_sizes
 
     def _build_decoder_train(self):
 
-        self._labels_embedded = tf.nn.embedding_lookup(self._embedding_matrix, self._labels_padded_GO)
-
-        self._helper_train = seq2seq.ScheduledEmbeddingTrainingHelper(
-            inputs=self._labels_embedded,
-            sequence_length=self._labels_len,
-            embedding=self._embedding_matrix,
-            sampling_probability=self._sampling_probability_outputs,
-        )
-
-        if self._hparams.enable_attention is True:
-            attention_mechanisms, layer_sizes = self._create_attention_mechanisms()
-
-            attention_cells = seq2seq.AttentionWrapper(
-                cell=self._decoder_cells,
-                attention_mechanism=attention_mechanisms,
-                attention_layer_size=layer_sizes,
-                initial_cell_state=self._decoder_initial_state,
-                alignment_history=False,
-                output_attention=self._output_attention,
+        with tf.device('/gpu:{}'.format(self._hparams.num_gpus % 1)):
+            self._labels_embedded = tf.nn.embedding_lookup(self._embedding_matrix, self._labels_padded_GO)
+    
+            self._helper_train = seq2seq.ScheduledEmbeddingTrainingHelper(
+                inputs=self._labels_embedded,
+                sequence_length=self._labels_len,
+                embedding=self._embedding_matrix,
+                sampling_probability=self._sampling_probability_outputs,
             )
-            batch_size, _ = tf.unstack(tf.shape(self._labels))
-
-            attn_zero = attention_cells.zero_state(
-                dtype=self._hparams.dtype, batch_size=batch_size
+    
+            if self._hparams.enable_attention is True:
+                attention_mechanisms, layer_sizes = self._create_attention_mechanisms()
+    
+                attention_cells = seq2seq.AttentionWrapper(
+                    cell=self._decoder_cells,
+                    attention_mechanism=attention_mechanisms,
+                    attention_layer_size=layer_sizes,
+                    initial_cell_state=self._decoder_initial_state,
+                    alignment_history=False,
+                    output_attention=self._output_attention,
+                )
+                batch_size, _ = tf.unstack(tf.shape(self._labels))
+    
+                attn_zero = attention_cells.zero_state(
+                    dtype=self._hparams.dtype, batch_size=batch_size
+                )
+                initial_state = attn_zero.clone(
+                    cell_state=self._decoder_initial_state
+                )
+    
+                cells = attention_cells
+            else:
+                cells = self._decoder_cells
+                initial_state = self._decoder_initial_state
+    
+            self._decoder_train = seq2seq.BasicDecoder(
+                cell=cells,
+                helper=self._helper_train,
+                initial_state=initial_state,
+                output_layer=self._dense_layer,
             )
-            initial_state = attn_zero.clone(
-                cell_state=self._decoder_initial_state
+    
+            self._decoder_train_outputs, self._final_states, self._final_seq_lens = seq2seq.dynamic_decode(
+                self._decoder_train,
+                output_time_major=False,
+                impute_finished=True,
+                swap_memory=self._hparams.swap_memory,
             )
+            
+    def _build_decoder_split_train(self):
 
-            cells = attention_cells
-        else:
-            cells = self._decoder_cells
-            initial_state = self._decoder_initial_state
-
-        self._decoder_train = seq2seq.BasicDecoder(
-            cell=cells,
-            helper=self._helper_train,
-            initial_state=initial_state,
-            output_layer=self._dense_layer,
-        )
-
-        self._decoder_train_outputs, self._final_states, self._final_seq_lens = seq2seq.dynamic_decode(
-            self._decoder_train,
-            output_time_major=False,
-            impute_finished=True,
-            swap_memory=False,
-        )
+        with tf.device('/gpu:{}'.format(self._hparams.num_gpus % 1)):
+            self._labels_embedded = tf.nn.embedding_lookup(self._embedding_matrix, self._labels_padded_GO)
+    
+            self._helper_train = seq2seq.ScheduledEmbeddingTrainingHelper(
+                inputs=self._labels_embedded,
+                sequence_length=self._labels_len,
+                embedding=self._embedding_matrix,
+                sampling_probability=self._sampling_probability_outputs,
+            )
+            num_units_att = self.decoder_units_per_layer_am
+            if self._hparams.enable_attention is True:
+                #attention goes into the lowest acoustic layer
+                attention_mechanisms, layer_sizes = self._create_attention_mechanisms(num_units=num_units_att)
+    
+                attention_cells = seq2seq.AttentionWrapper(
+                    cell=self._decoder_am_cells,
+                    attention_mechanism=attention_mechanisms,
+                    attention_layer_size=layer_sizes,
+                    initial_cell_state=self._decoder_initial_state,
+                    alignment_history=False,
+                    output_attention=self._output_attention,
+                )
+                batch_size, _ = tf.unstack(tf.shape(self._labels))
+    
+                attn_zero = attention_cells.zero_state(
+                    dtype=self._hparams.dtype, batch_size=batch_size
+                )
+                initial_state = attn_zero.clone(
+                    cell_state=self._decoder_initial_state
+                )
+    
+                cells = attention_cells
+            else:
+                cells = self._decoder_cells
+                initial_state = self._decoder_initial_state
+    
+            self._decoder_train = seq2seq.BasicDecoder(
+                cell=cells,
+                helper=self._helper_train,
+                initial_state=initial_state,
+                output_layer=self._dense_layer,
+            )
+    
+            self._decoder_train_outputs, self._final_states, self._final_seq_lens = seq2seq.dynamic_decode(
+                self._decoder_train,
+                output_time_major=False,
+                impute_finished=True,
+                swap_memory=self._hparams.swap_memory,
+            )            
 
     def _build_decoder_greedy(self):
 
@@ -344,7 +428,7 @@ class Seq2SeqBimodalDecoder(object):
         outputs, states, lengths = seq2seq.dynamic_decode(
             self._decoder_inference,
             impute_finished=True,
-            swap_memory=False,
+            swap_memory=self._hparams.swap_memory,
             maximum_iterations=self._hparams.max_label_length)
 
         # self._result = outputs, states, lengths
@@ -405,82 +489,7 @@ class Seq2SeqBimodalDecoder(object):
         self.inference_predicted_ids = outputs.predicted_ids[:, :, 0]  # return the first beam
         self.inference_predicted_beam = outputs.predicted_ids
 
-    def _create_attention_mechanism(self,
-                                    attention_type,
-                                    num_units,
-                                    memory,
-                                    memory_sequence_length):
 
-        if attention_type == 'bahdanau':
-            attention_mechanism = seq2seq.BahdanauAttention(
-                num_units=num_units,
-                memory=memory,
-                memory_sequence_length=memory_sequence_length,
-                normalize=False
-            )
-            self._output_attention = False
-        elif attention_type == 'normed_bahdanau':
-            attention_mechanism = seq2seq.BahdanauAttention(
-                num_units=num_units,
-                memory=memory,
-                memory_sequence_length=memory_sequence_length,
-                normalize=True
-            )
-            self._output_attention = False
-        elif attention_type == 'normed_monotonic_bahdanau':
-            attention_mechanism = seq2seq.BahdanauMonotonicAttention(
-                num_units=num_units,
-                memory=memory,
-                memory_sequence_length=memory_sequence_length,
-                normalize=True,
-                score_bias_init=-2.0,
-                sigmoid_noise=1.0 if self._mode == 'train' else 0.0,
-                mode='hard' if self._mode != 'train' else 'parallel'
-            )
-            self._output_attention = False
-        elif attention_type == 'luong':
-            attention_mechanism = seq2seq.LuongAttention(
-                num_units=num_units,
-                memory=memory,
-                memory_sequence_length=memory_sequence_length
-            )
-            self._output_attention = True
-        elif attention_type == 'scaled_luong':
-            attention_mechanism = seq2seq.LuongAttention(
-                num_units=num_units,
-                memory=memory,
-                memory_sequence_length=memory_sequence_length,
-                scale=True,
-            )
-            self._output_attention = True
-        elif attention_type == 'scaled_monotonic_luong':
-            attention_mechanism = seq2seq.LuongMonotonicAttention(
-                num_units=num_units,
-                memory=memory,
-                memory_sequence_length=memory_sequence_length,
-                scale=True,
-                score_bias_init=-2.0,
-                sigmoid_noise=1.0 if self._mode == 'train' else 0.0,
-                mode='hard' if self._mode != 'train' else 'parallel'
-            )
-            self._output_attention = True
-        else:
-            raise Exception('unknown attention mechanism')
-
-        return attention_mechanism
-
-    def _create_attention_alignments_summary(self, states):
-        attention_alignment = states.alignment_history.stack()
-
-        attention_images = tf.expand_dims(tf.transpose(attention_alignment, [1, 2, 0]), -1)
-
-        # attention_images_scaled = tf.image.resize_images(1-attention_images, (256,128))
-        attention_images_scaled = 1 - attention_images
-
-        attention_summary = tf.summary.image("attention_images", attention_images_scaled,
-                                             max_outputs=self._hparams.batch_size[1])
-
-        return attention_summary
 
     def get_predictions(self):
         return self.inference_predicted_ids
@@ -610,3 +619,36 @@ def _project_lstm_state_tuple(state_tuple, num_units):
     projected_state = tf.contrib.rnn.LSTMStateTuple(c=proj_c, h=proj_h)
 
     return projected_state
+
+def _build_rnn_layers_split(cell_type,
+        num_units_per_layer,
+        use_dropout,
+        dropout_probability,
+        mode,
+        base_gpu,
+    ):
+    if base_gpu:
+        device = '/gpu:{}'.format(base_gpu)
+    else:
+        device = None
+
+    cell_list = []
+    for layer, units in enumerate(num_units_per_layer):
+
+        cell = _build_single_cell(
+            cell_type=cell_type,
+            num_units=units,
+            use_dropout=use_dropout,
+            dropout_probability=dropout_probability,
+            mode=mode,
+            device=device)
+        
+        if layer == 1:
+            _creat
+
+        cell_list.append(cell)
+
+    if len(cell_list) == 1:
+        return cell_list[0]
+    else:
+        return MultiRNNCell(cell_list), 

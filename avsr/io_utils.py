@@ -188,13 +188,17 @@ def make_iterator_from_two_records(video_record, audio_record, label_record,
     #     )
 
     def batching_fun(x):
-        return x.padded_batch(
-            batch_size=batch_size,
-            padded_shapes=(
-                ((tf.TensorShape([None] + vid_input_shape), tf.TensorShape([]), tf.TensorShape([]), ), (tf.TensorShape([None] + aud_input_shape), tf.TensorShape([]), tf.TensorShape([]), ) ),
-                (tf.TensorShape([None]), tf.TensorShape([]), tf.TensorShape([]))  # hence concatenated
-            )
-        )
+        # below last batch can unpredictabley lead to unexpected behaviour 
+        # @see https://github.com/tensorflow/tensorflow/issues/13745
+        # @see https://github.com/tensorflow/tensorflow/issues/13161
+        # the safe option, could manually set shape on last batch too
+        return tf.data.Dataset.apply(x, tf.contrib.data.padded_batch_and_drop_remainder(
+                        batch_size=batch_size,
+                        padded_shapes=(
+                            ((tf.TensorShape([None] + vid_input_shape), tf.TensorShape([]), tf.TensorShape([]), ), (tf.TensorShape([None] + aud_input_shape), tf.TensorShape([]), tf.TensorShape([]), ) ),
+                            (tf.TensorShape([None]), tf.TensorShape([]), tf.TensorShape([]))  # hence concatenated
+                        )
+                    ))
 
     if bucket_width == -1:
         dataset = batching_fun(dataset)
@@ -214,6 +218,11 @@ def make_iterator_from_two_records(video_record, audio_record, label_record,
     dataset = dataset.prefetch(num_cores)
     iterator = dataset.make_initializable_iterator()
     ((vid_inputs, vid_inputs_len, vid_fname1), (aud_inputs, aud_inputs_len, aud_fname1)), (labels, labels_len, labels_fname2) = iterator.get_next()
+    #vid_inputs_len = tf.Print(vid_inputs_len, [vid_inputs_len, vid_inputs_len[0], tf.shape(vid_inputs_len1)], "bs_vid_il::"+vid_inputs_len1.name)
+    #vid_inputs = tf.Print(vid_inputs, [vid_inputs, tf.shape(vid_inputs)], "bs_vid_int::"+vid_inputs.name)
+    #aud_inputs_len = tf.Print(aud_inputs_len, [aud_inputs_len, tf.shape(aud_inputs_len)], "bs_aud_il::"+aud_inputs_len.name)
+    #aud_inputs = tf.Print(aud_inputs, [aud_inputs, tf.shape(aud_inputs)], "bs_aud::"+aud_inputs.name)
+    
 
     return BatchedData(
         initializer=iterator.initializer,

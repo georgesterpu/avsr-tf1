@@ -52,3 +52,7 @@ def write_sequences_to_labelfile(sequence_dict, fname):
         f.writelines(items)
 
     del items
+
+def flatten(list):
+    if isinstance(list, str): return [list]  
+    return list(itertools.chain.from_iterable([list]))
