@@ -28,6 +28,7 @@ class Seq2SeqModel(object):
 
         self._mode = mode
         self._hparams = hparams
+        self._batch_size = hparams.batch_size[0 if mode == 'train' else 1]
 
         self._make_encoders()
         self._make_decoder()
@@ -41,7 +42,7 @@ class Seq2SeqModel(object):
         att_memory_audio = None
         encoder_output_size = self._hparams.encoder_units_per_layer[-1]
         #only last dim counts, but tf.zeros needs full spec
-        fake_mem = tf.zeros([1, 1, encoder_output_size])
+        fake_mem = tf.zeros([self._batch_size, 1, encoder_output_size])
         #underspecified output shape as dynamic_rnn produces
         encoder_output_shape = tf.TensorShape([None, None, encoder_output_size])
 
