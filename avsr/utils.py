@@ -1,4 +1,4 @@
-
+import itertools
 
 def compute_wer(predictions_dict, ground_truth_dict, split_words=False):
     wer = 0
