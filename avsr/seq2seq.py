@@ -2,8 +2,6 @@ import tensorflow as tf
 from .encoder import Seq2SeqEncoder, AttentiveEncoder
 from .decoder_bimodal import Seq2SeqBimodalDecoder
 from .decoder_unimodal import Seq2SeqUnimodalDecoder
-# from .avsr import Data
-from .multimodal_fusion import AVFusion
 
 
 class Seq2SeqModel(object):
