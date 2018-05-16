@@ -1,8 +1,9 @@
 import tensorflow as tf
-from .encoder import Seq2SeqEncoder
+from .encoder import Seq2SeqEncoder, AttentiveEncoder
 from .decoder_bimodal import Seq2SeqBimodalDecoder
 from .decoder_unimodal import Seq2SeqUnimodalDecoder
 # from .avsr import Data
+from .multimodal_fusion import AVFusion
 
 
 class Seq2SeqModel(object):
@@ -36,11 +37,19 @@ class Seq2SeqModel(object):
 
         if self._audio_data is not None:
             with tf.variable_scope('audio'):
-                self._audio_encoder = Seq2SeqEncoder(
+                # self._audio_encoder = Seq2SeqEncoder(
+                #     data=self._audio_data,
+                #     mode=self._mode,
+                #     hparams=self._hparams,
+                #     gpu_id=1 % self._hparams.num_gpus
+                # )
+                self._audio_encoder = AttentiveEncoder(
                     data=self._audio_data,
                     mode=self._mode,
                     hparams=self._hparams,
-                    gpu_id=1 % self._hparams.num_gpus
+                    gpu_id=1 % self._hparams.num_gpus,
+                    attended_memory=self._video_encoder.get_data().outputs,
+                    attended_memory_length=self._video_data.inputs_length
                 )
         else:
             self._audio_encoder = None
@@ -71,24 +80,50 @@ class Seq2SeqModel(object):
         if labels is None or labels_length is None:
             raise Exception('labels are None')
 
-        self._decoder = Seq2SeqBimodalDecoder(
-            video_output=video_output,
-            audio_output=audio_output,
-            video_features_len=video_len,
-            audio_features_len=audio_len,
-            labels=labels,
-            labels_length=labels_length,
-            mode=self._mode,
-            hparams=self._hparams
-        )
-        # self._decoder = Seq2SeqUnimodalDecoder(
-        #     encoder_output=video_output,
-        #     encoder_features_len=video_len,
+        # self._decoder = Seq2SeqBimodalDecoder(
+        #     video_output=video_output,
+        #     audio_output=audio_output,
+        #     video_features_len=video_len,
+        #     audio_features_len=audio_len,
         #     labels=labels,
         #     labels_length=labels_length,
         #     mode=self._mode,
         #     hparams=self._hparams
         # )
+
+        ###
+        # here finetune the video memory
+
+        # tuner = AVFusion(
+        #     source_output=audio_output,
+        #     source_memory_lengths=audio_len,
+        #     attended_output=video_output,
+        #     attention_memory_lengths=video_len,
+        #     hparams=self._hparams,
+        #     mode=self._mode,
+        # )
+        # tuner = AVFusion(
+        #     source_output=video_output,
+        #     source_memory_lengths=video_len,
+        #     attended_output=audio_output,
+        #     attention_memory_lengths=audio_len,
+        #     hparams=self._hparams,
+        #     mode=self._mode,
+        #
+        # )
+
+        # tuned_output = tuner.get_tuned_data()
+
+        ###
+
+        self._decoder = Seq2SeqUnimodalDecoder(
+            encoder_output=audio_output,
+            encoder_features_len=audio_len,
+            labels=labels,
+            labels_length=labels_length,
+            mode=self._mode,
+            hparams=self._hparams
+        )
 
         self.train_op = self._decoder.train_op if self._mode == 'train' else None
         self.batch_loss = self._decoder.batch_loss if self._mode == 'train' else None

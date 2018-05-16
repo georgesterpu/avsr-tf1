@@ -1,6 +1,9 @@
 import tensorflow as tf
 import collections
-from .cells import build_rnn_layers
+from .cells import build_rnn_layers, create_attention_mechanism
+from tensorflow.contrib import seq2seq
+from tensorflow.contrib.rnn import MultiRNNCell
+
 
 from tensorflow.python.layers.core import Dense
 
@@ -148,4 +151,74 @@ class Seq2SeqEncoder(object):
         return EncoderData(
             outputs=self._encoder_outputs,
             final_state=self._encoder_final_state
+        )
+
+
+class AttentiveEncoder(Seq2SeqEncoder):
+
+    def __init__(self,
+                 data,
+                 mode,
+                 hparams,
+                 gpu_id,
+                 attended_memory,
+                 attended_memory_length):
+
+        self._attended_memory = attended_memory
+        self._attended_memory_length = attended_memory_length
+
+        super(AttentiveEncoder, self).__init__(
+            data,
+            mode,
+            hparams,
+            gpu_id)
+
+    def _init_encoder(self):
+        with tf.variable_scope("Encoder") as scope:
+
+            encoder_inputs = self._maybe_add_dense_layers()
+
+            if self._hparams.encoder_type == 'unidirectional':
+                self._encoder_cells = build_rnn_layers(
+                    cell_type=self._hparams.cell_type,
+                    num_units_per_layer=self._hparams.encoder_units_per_layer,
+                    use_dropout=self._hparams.use_dropout,
+                    dropout_probability=self._hparams.dropout_probability,
+                    mode=self._mode,
+                    base_gpu=self._gpu_id,
+                    as_list=True)
+
+                attention_mechanism, output_attention = create_attention_mechanism(
+                    attention_type=self._hparams.attention_type[0][0],
+                    num_units=self._hparams.encoder_units_per_layer[-1],
+                    memory=self._attended_memory,
+                    memory_sequence_length=self._attended_memory_length,
+                    mode=self._mode,
+                )
+
+                attention_cells = seq2seq.AttentionWrapper(
+                    cell=self._encoder_cells[-1],
+                    attention_mechanism=attention_mechanism,
+                    attention_layer_size=self._hparams.decoder_units_per_layer[-1],
+                    alignment_history=False,
+                    output_attention=output_attention,
+                )
+
+                self._encoder_cells[-1] = attention_cells
+
+                self._encoder_outputs, self._encoder_final_state = tf.nn.dynamic_rnn(
+                    cell=MultiRNNCell(self._encoder_cells),
+                    inputs=encoder_inputs,
+                    sequence_length=self._inputs_len,
+                    parallel_iterations=self._hparams.batch_size[0 if self._mode == 'train' else 1],
+                    swap_memory=False,
+                    dtype=self._hparams.dtype,
+                    scope=scope,
+                    )
+
+    def get_data(self):
+
+        return EncoderData(
+            outputs=self._encoder_outputs,
+            final_state=(self._encoder_final_state[:-1], self._encoder_final_state[-1].cell_state)
         )

@@ -1,7 +1,7 @@
 from tensorflow.contrib.rnn import MultiRNNCell,DeviceWrapper, DropoutWrapper, \
     LSTMCell, GRUCell, LSTMBlockCell, UGRNNCell
 import tensorflow as tf
-
+from tensorflow.contrib import seq2seq
 
 def _build_single_cell(cell_type, num_units, use_dropout, mode, dropout_probability, device=None):
     r"""
@@ -51,6 +51,7 @@ def build_rnn_layers(
         dropout_probability,
         mode,
         base_gpu,
+        as_list=False
     ):
     if base_gpu:
         device = '/gpu:{}'.format(base_gpu)
@@ -73,4 +74,73 @@ def build_rnn_layers(
     if len(cell_list) == 1:
         return cell_list[0]
     else:
-        return MultiRNNCell(cell_list)
+        if as_list is False:
+            return MultiRNNCell(cell_list)
+        else:
+            return cell_list
+
+
+def create_attention_mechanism(attention_type,
+                                num_units,
+                                memory,
+                                memory_sequence_length,
+                                mode):
+
+    if attention_type == 'bahdanau':
+        attention_mechanism = seq2seq.BahdanauAttention(
+            num_units=num_units,
+            memory=memory,
+            memory_sequence_length=memory_sequence_length,
+            normalize=False
+        )
+        output_attention = False
+    elif attention_type == 'normed_bahdanau':
+        attention_mechanism = seq2seq.BahdanauAttention(
+            num_units=num_units,
+            memory=memory,
+            memory_sequence_length=memory_sequence_length,
+            normalize=True
+        )
+        output_attention = False
+    elif attention_type == 'normed_monotonic_bahdanau':
+        attention_mechanism = seq2seq.BahdanauMonotonicAttention(
+            num_units=num_units,
+            memory=memory,
+            memory_sequence_length=memory_sequence_length,
+            normalize=True,
+            score_bias_init=-2.0,
+            sigmoid_noise=1.0 if mode == 'train' else 0.0,
+            mode='hard' if mode != 'train' else 'parallel'
+        )
+        output_attention = False
+    elif attention_type == 'luong':
+        attention_mechanism = seq2seq.LuongAttention(
+            num_units=num_units,
+            memory=memory,
+            memory_sequence_length=memory_sequence_length
+        )
+        output_attention = True
+    elif attention_type == 'scaled_luong':
+        attention_mechanism = seq2seq.LuongAttention(
+            num_units=num_units,
+            memory=memory,
+            memory_sequence_length=memory_sequence_length,
+            scale=True,
+        )
+        output_attention = True
+    elif attention_type == 'scaled_monotonic_luong':
+        attention_mechanism = seq2seq.LuongMonotonicAttention(
+            num_units=num_units,
+            memory=memory,
+            memory_sequence_length=memory_sequence_length,
+            scale=True,
+            score_bias_init=-2.0,
+            sigmoid_noise=1.0 if mode == 'train' else 0.0,
+            mode='hard' if mode != 'train' else 'parallel'
+        )
+        output_attention = True
+    else:
+        raise Exception('unknown attention mechanism')
+
+    return attention_mechanism, output_attention
+
