@@ -26,11 +26,11 @@ def _build_single_cell(cell_type, num_units, use_dropout, mode, dropout_probabil
         cells = GRUCell(num_units=num_units,
                         kernel_initializer=tf.variance_scaling_initializer(),
                         bias_initializer=tf.variance_scaling_initializer())
-        raise NotImplementedError("Not fully implemented: ", cell_type)
     elif cell_type == 'cudnngru':
         cells = CudnnCompatibleGRUCell(num_units=num_units,
                         kernel_initializer=tf.variance_scaling_initializer(),
                         bias_initializer=tf.variance_scaling_initializer())
+        raise NotImplementedError("Not fully implemented: ", cell_type)
     elif cell_type == 'ugrnn':
         cells = UGRNNCell(num_units)
     elif cell_type == 'lstm_block':
