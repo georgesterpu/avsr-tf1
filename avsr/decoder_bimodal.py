@@ -186,20 +186,20 @@ class Seq2SeqBimodalDecoder(object):
             audio_state = (audio_state, )
 
         for i in range(len(self._hparams.encoder_units_per_layer)):
-            try:
+            if isinstance(video_state[i], LSTMStateTuple):
                 cat_c = tf.concat((video_state[i].c, audio_state[i].c), axis=-1)
                 cat_h = tf.concat((video_state[i].h, audio_state[i].h), axis=-1)
                 state_tuples.append(LSTMStateTuple(c=cat_c, h=cat_h))
-            except:
+            else:
                 video_state_c, video_state_h = tf.split(video_state[i],
                                                         num_or_size_splits=2,
                                                         axis=-1)
                 audio_state_c, audio_state_h = tf.split(audio_state[i],
                                                         num_or_size_splits=2,
                                                         axis=-1)
-                cat_c = tf.concat(video_state_c, audio_state_c, -1)
-                cat_h = tf.concat(video_state_h, audio_state_h, -1) 
-                state_tuples.append(tf.concat(cat_c, cat_h))
+                cat_c = tf.concat((video_state_c, audio_state_c), -1)
+                cat_h = tf.concat((video_state_h, audio_state_h), -1) 
+                state_tuples.append(tf.concat((cat_c, cat_h), -1))
 
         state_tuples = tuple(state_tuples)
             
@@ -215,8 +215,12 @@ class Seq2SeqBimodalDecoder(object):
 
             ## option 2
 
-            self._decoder_initial_state = _project_lstm_state_tuple(
-                state_tuples, num_units=self._hparams.decoder_units_per_layer[0])
+            if isinstance(state_tuples[0], LSTMStateTuple):
+                self._decoder_initial_state = _project_lstm_state_tuple(
+                    state_tuples, num_units=self._hparams.decoder_units_per_layer[0])
+            else:
+                self._decoder_initial_state = _project_state(
+                    state_tuples, num_units=self._hparams.decoder_units_per_layer[0])
         else:
             self._decoder_initial_state = state_tuples
             # make sure that encoder_units[i] == decoder_units[i] for i in num_layers
@@ -617,6 +621,29 @@ def _project_lstm_state_tuple(state_tuple, num_units):
     proj_h = state_proj_layer(cat_h)
 
     projected_state = tf.contrib.rnn.LSTMStateTuple(c=proj_c, h=proj_h)
+
+    return projected_state
+
+def _project_state(state, num_units):
+
+    state_proj_layer = Dense(num_units,
+                            name='state_projection',
+                            use_bias=False,
+                            )
+
+    video_state_c, video_state_h = tf.split(video_state[i],
+                                            num_or_size_splits=2,
+                                            axis=-1)
+    audio_state_c, audio_state_h = tf.split(audio_state[i],
+                                            num_or_size_splits=2,
+                                            axis=-1)
+    cat_c = tf.concat((video_state_c, audio_state_c), -1)
+    cat_h = tf.concat((video_state_h, audio_state_h), -1) 
+
+    proj_c = state_proj_layer(cat_c)
+    proj_h = state_proj_layer(cat_h)
+
+    projected_state = tf.concat((proj_c, proj_h), -1)
 
     return projected_state
 
