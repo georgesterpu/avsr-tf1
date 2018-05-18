@@ -631,17 +631,12 @@ def _project_state(state, num_units):
                             use_bias=False,
                             )
 
-    video_state_c, video_state_h = tf.split(video_state[i],
-                                            num_or_size_splits=2,
-                                            axis=-1)
-    audio_state_c, audio_state_h = tf.split(audio_state[i],
-                                            num_or_size_splits=2,
-                                            axis=-1)
-    cat_c = tf.concat((video_state_c, audio_state_c), -1)
-    cat_h = tf.concat((video_state_h, audio_state_h), -1) 
+    state_c, state_h = tf.split(state,
+                                num_or_size_splits=2,
+                                axis=-1)
 
-    proj_c = state_proj_layer(cat_c)
-    proj_h = state_proj_layer(cat_h)
+    proj_c = state_proj_layer(state_c)
+    proj_h = state_proj_layer(state_h)
 
     projected_state = tf.concat((proj_c, proj_h), -1)
 
