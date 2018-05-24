@@ -36,6 +36,7 @@ class AVSR(object):
                  cnn_dense_units=128,
                  batch_normalisation=True,
                  input_dense_layers=(0,),
+                 architecture='unimodal',
                  encoder_type='unidirectional',
                  cell_type='lstm',
                  recurrent_regularisation=0.0001,
@@ -84,6 +85,7 @@ class AVSR(object):
             batch_normalisation=batch_normalisation,
             input_dense_layers=input_dense_layers,
             encoder_type=encoder_type,
+            architecture=architecture,
             cell_type=cell_type,
             recurrent_regularisation=recurrent_regularisation,
             encoder_units_per_layer=encoder_units_per_layer,
@@ -375,6 +377,7 @@ class AVSR(object):
                     data_record=self._video_train_record if mode == 'train' else self._video_test_record,
                     label_record=self._labels_train_record if mode == 'train' else self._labels_test_record,
                     batch_size=batch_size,
+                    unit_dict=self._hparams.unit_dict,
                     shuffle=True if mode == 'train' else False,
                     reverse_input=False,
                     bucket_width=15,  # 0.5sec at 30 fps
@@ -388,8 +391,9 @@ class AVSR(object):
                     label_record=self._labels_train_record if mode == 'train' else self._labels_test_record,
                     batch_size=batch_size,
                     shuffle=True if mode == 'train' else False,
+                    unit_dict=self._hparams.unit_dict,
                     reverse_input=False,
-                    bucket_width=50,  # 0.5 sec at 100 mfcc/sec
+                    bucket_width=30,  # 0.6 sec at 30 mfcc/sec
                 )
 
                 audio_data = self._parse_iterator(audio_iterator)
