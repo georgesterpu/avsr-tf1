@@ -34,7 +34,12 @@ class Seq2SeqUnimodalDecoder(object):
                                                          dtype=self._hparams.dtype)
         self._vocab_size = len(hparams.unit_dict) - 1  # excluding END
 
+        if self._hparams.mwer_training is True:
+            self._char_emb = tf.constant([chr(ord(c)) for c in range(len(self._vocab_size))])
+
         self._global_step = tf.Variable(0, trainable=False, name='global_step')
+
+        self._batch_size, _ = tf.unstack(tf.shape(self._labels))
 
         # create model
         self._add_special_symbols()
@@ -45,8 +50,8 @@ class Seq2SeqUnimodalDecoder(object):
 
 
     def _add_special_symbols(self):
-        batch_size, sequence_len = tf.unstack(tf.shape(self._labels))
-        _GO_SLICE = tf.ones([batch_size, 1], dtype=tf.int32) * self._GO_ID
+
+        _GO_SLICE = tf.ones([self._batch_size, 1], dtype=tf.int32) * self._GO_ID
 
         self._labels_padded_GO = tf.concat([_GO_SLICE, self._labels], axis=1)
 
@@ -130,19 +135,22 @@ class Seq2SeqUnimodalDecoder(object):
         layer_sizes = []
 
         if beam_search is True:
-            ## TODO potentially broken, please re-check
-            self._encoder_memory = seq2seq.tile_batch(
+            encoder_memory = seq2seq.tile_batch(
                 self._encoder_memory, multiplier=self._hparams.beam_width)
 
-            self._encoder_features_len = seq2seq.tile_batch(
+            encoder_features_len = seq2seq.tile_batch(
                 self._encoder_features_len, multiplier=self._hparams.beam_width)
+
+        else:
+            encoder_memory = self._encoder_memory
+            encoder_features_len = self._encoder_features_len
 
         for attention_type in self._hparams.attention_type[0]:
 
             attention = self._create_attention_mechanism(
                 num_units=self._hparams.decoder_units_per_layer[-1],
-                memory=self._encoder_memory,
-                memory_sequence_length=self._encoder_features_len,
+                memory=encoder_memory,
+                memory_sequence_length=encoder_features_len,
                 attention_type=attention_type
             )
             mechanisms.append(attention)
@@ -154,78 +162,20 @@ class Seq2SeqUnimodalDecoder(object):
 
         self._labels_embedded = tf.nn.embedding_lookup(self._embedding_matrix, self._labels_padded_GO)
 
-        self._helper_train = seq2seq.ScheduledEmbeddingTrainingHelper(
-            inputs=self._labels_embedded,
-            sequence_length=self._labels_len,
-            embedding=self._embedding_matrix,
-            sampling_probability=self._sampling_probability_outputs,
-        )
+        self._basic_decoder_train_outputs, self._final_states, self._final_seq_lens = self._basic_decoder_train()
 
-        if self._hparams.enable_attention is True:
-            attention_mechanisms, layer_sizes = self._create_attention_mechanisms()
-
-            attention_cells = seq2seq.AttentionWrapper(
-                cell=self._decoder_cells,
-                attention_mechanism=attention_mechanisms,
-                attention_layer_size=layer_sizes,
-                initial_cell_state=self._decoder_initial_state,
-                alignment_history=False,
-                output_attention=self._output_attention,
-            )
-            batch_size, _ = tf.unstack(tf.shape(self._labels))
-
-            attn_zero = attention_cells.zero_state(
-                dtype=self._hparams.dtype, batch_size=batch_size
-            )
-            initial_state = attn_zero.clone(
-                cell_state=self._decoder_initial_state
-            )
-
-            cells = attention_cells
-        else:
-            cells = self._decoder_cells
-            initial_state = self._decoder_initial_state
-
-        self._decoder_train = seq2seq.BasicDecoder(
-            cell=cells,
-            helper=self._helper_train,
-            initial_state=initial_state,
-            output_layer=self._dense_layer,
-        )
-
-        self._decoder_train_outputs, self._final_states, self._final_seq_lens = seq2seq.dynamic_decode(
-            self._decoder_train,
-            output_time_major=False,
-            impute_finished=True,
-            swap_memory=False,
-        )
+        if self._hparams.mwer_training is True:
+            self._beam_decoder_train_ids, self._beam_decoder_train_scores = self._beam_decoder_train()
 
     def _build_decoder_greedy(self):
 
-        batch_size, _ = tf.unstack(tf.shape(self._labels))
         self._helper_greedy = seq2seq.GreedyEmbeddingHelper(
             embedding=self._embedding_matrix,
-            start_tokens=tf.tile([self._GO_ID], [batch_size]),
+            start_tokens=tf.tile([self._GO_ID], [self._batch_size]),
             end_token=self._EOS_ID)
 
         if self._hparams.enable_attention is True:
-            attention_mechanisms, layer_sizes = self._create_attention_mechanisms()
-
-            attention_cells = seq2seq.AttentionWrapper(
-                cell=self._decoder_cells,
-                attention_mechanism=attention_mechanisms,
-                attention_layer_size=layer_sizes,
-                initial_cell_state=self._decoder_initial_state,
-                alignment_history=self._hparams.write_attention_alignment,
-                output_attention=self._output_attention
-            )
-            attn_zero = attention_cells.zero_state(
-                dtype=self._hparams.dtype, batch_size=batch_size
-            )
-            initial_state = attn_zero.clone(
-                cell_state=self._decoder_initial_state
-            )
-            cells = attention_cells
+            cells, initial_state = self._add_attention(decoder_cells=self._decoder_cells, beam_search=False)
         else:
             cells = self._decoder_cells
             initial_state = self._decoder_initial_state
@@ -251,38 +201,19 @@ class Seq2SeqUnimodalDecoder(object):
 
     def _build_decoder_beam_search(self):
 
-        batch_size, _ = tf.unstack(tf.shape(self._labels))
-
-        attention_mechanisms, layer_sizes = self._create_attention_mechanisms(beam_search=True)
-
-        decoder_initial_state_tiled = seq2seq.tile_batch(
-            self._decoder_initial_state, multiplier=self._hparams.beam_width)
-
         if self._hparams.enable_attention is True:
-
-            attention_cells = seq2seq.AttentionWrapper(
-                cell=self._decoder_cells,
-                attention_mechanism=attention_mechanisms,
-                attention_layer_size=layer_sizes,
-                initial_cell_state=decoder_initial_state_tiled,
-                alignment_history=False,
-                output_attention=self._output_attention)
-
-            initial_state = attention_cells.zero_state(
-                dtype=self._hparams.dtype, batch_size=batch_size * self._hparams.beam_width)
-
-            initial_state = initial_state.clone(
-                cell_state=decoder_initial_state_tiled)
-
-            cells = attention_cells
-        else:
+            cells, initial_state = self._add_attention(self._decoder_cells, beam_search=True)
+        else:  # the non-attentive beam decoder does not need data
             cells = self._decoder_cells
+
+            decoder_initial_state_tiled = seq2seq.tile_batch(
+                self._decoder_initial_state, multiplier=self._hparams.beam_width)
             initial_state = decoder_initial_state_tiled
 
         self._decoder_inference = seq2seq.BeamSearchDecoder(
             cell=cells,
             embedding=self._embedding_matrix,
-            start_tokens=array_ops.fill([batch_size], self._GO_ID),
+            start_tokens=array_ops.fill([self._batch_size], self._GO_ID),
             end_token=self._EOS_ID,
             initial_state=initial_state,
             beam_width=self._hparams.beam_width,
@@ -402,9 +333,15 @@ class Seq2SeqUnimodalDecoder(object):
 
         # self._labels = tf.Print(self._labels, [diff], summarize=1000)
         self.batch_loss = seq2seq.sequence_loss(
-            logits=self._decoder_train_outputs.rnn_output,
+            logits=self._basic_decoder_train_outputs.rnn_output,
             targets=self._labels,
             weights=self._loss_weights)
+
+        if self._hparams.mwer_training is True:
+            # self._beam_decoder_train_ids, self._beam_decoder_train_scores
+            # avg_prob = tf.reduce_mean(self._beam_decoder_train_ids, axis=[1])
+            # wers = _compute_wers(self._beam_decoder_train_ids, self._labels)
+            pass
 
         reg_loss = 0
 
@@ -453,12 +390,111 @@ class Seq2SeqUnimodalDecoder(object):
             self.train_op = optimiser.apply_gradients(
                 zip(gradients, variables))
 
-
     def _get_trainable_vars(self, cell_type):
         cell_type = cell_type.split('_')[0]
         vars = [var for var in tf.trainable_variables() if cell_type + '_' in var.name
                 and not 'bias' in var.name]
         return vars
+
+    def _basic_decoder_train(self):
+
+        helper_train = seq2seq.ScheduledEmbeddingTrainingHelper(
+            inputs=self._labels_embedded,
+            sequence_length=self._labels_len,
+            embedding=self._embedding_matrix,
+            sampling_probability=self._sampling_probability_outputs,
+        )
+
+        if self._hparams.enable_attention is True:
+            cells, initial_state = self._add_attention(self._decoder_cells)
+        else:
+            cells = self._decoder_cells
+            initial_state = self._decoder_initial_state
+
+        decoder_train = seq2seq.BasicDecoder(
+            cell=cells,
+            helper=helper_train,
+            initial_state=initial_state,
+            output_layer=self._dense_layer,
+        )
+
+        outputs, fstate, fseqlen = seq2seq.dynamic_decode(
+            decoder_train,
+            output_time_major=False,
+            impute_finished=True,
+            swap_memory=False,
+        )
+
+        return outputs, fstate, fseqlen
+
+    def _beam_decoder_train(self):
+
+        if self._hparams.enable_attention is True:
+            cells, initial_state = self._add_attention(self._decoder_cells, beam_search=True)
+        else:
+            cells = self._decoder_cells
+            initial_state = self._decoder_initial_state
+            # do we need to tile the initial state when beam with no attention is used?
+
+        beam_decoder= seq2seq.BeamSearchDecoder(
+            cell=cells,
+            embedding=self._embedding_matrix,
+            start_tokens=array_ops.fill([self._batch_size], self._GO_ID),
+            end_token=self._EOS_ID,
+            initial_state=initial_state,
+            beam_width=self._hparams.beam_width,
+            output_layer=self._dense_layer,
+            length_penalty_weight=0.5,
+        )
+
+        output, fstate, fseqlen = seq2seq.dynamic_decode(
+            beam_decoder,
+            output_time_major=False,
+            impute_finished=True,
+            swap_memory=False
+        )
+
+        beam_scores = output.beam_search_decoder_output.scores
+        beam_ids = output.predicted_ids
+
+        return beam_ids, beam_scores
+
+    def _add_attention(self, decoder_cells, beam_search=False):
+        attention_mechanisms, layer_sizes = self._create_attention_mechanisms(beam_search)
+
+        if beam_search is True:
+            decoder_initial_state = seq2seq.tile_batch(
+                self._decoder_initial_state, multiplier=self._hparams.beam_width)
+        else:
+            decoder_initial_state = self._decoder_initial_state
+
+        attention_cells = seq2seq.AttentionWrapper(
+            cell=decoder_cells,
+            attention_mechanism=attention_mechanisms,
+            attention_layer_size=layer_sizes,
+            initial_cell_state=decoder_initial_state,
+            alignment_history=False,
+            output_attention=self._output_attention,
+        )
+
+        attn_zero = attention_cells.zero_state(
+            dtype=self._hparams.dtype, batch_size=self._batch_size
+        )
+        initial_state = attn_zero.clone(
+            cell_state=decoder_initial_state
+        )
+
+        return attention_cells, initial_state
+
+    def _compute_beam_wers(self, beam_ids, labels):
+        beam_chars = tf.nn.embedding_lookup(self._char_emb, beam_ids)
+        labels_chars = tf.nn.embedding_lookup(self._char_emb, labels)
+        beam_strings = tf.string_join(tf.split(beam_chars, beam_chars.shape[1], axis=1), '')
+        labels_strings = tf.string_join(tf.split(labels_chars, labels_chars.shape[1], axis=1), '')
+
+        beam_eds = tf.stack([tf.edit_distance(tf.string_split(c), tf.string_split(d)) for c, d in (tf.unstack(beam_strings), tf.unstack(labels_strings))])
+
+        return beam_eds
 
 def _project_lstm_state_tuple(state_tuple, num_units):
 
