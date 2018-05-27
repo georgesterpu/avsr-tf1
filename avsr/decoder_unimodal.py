@@ -35,7 +35,7 @@ class Seq2SeqUnimodalDecoder(object):
         self._vocab_size = len(hparams.unit_dict) - 1  # excluding END
 
         if self._hparams.mwer_training is True:
-            self._char_emb = tf.constant([chr(ord(c)) for c in range(len(self._vocab_size))])
+            self._char_emb = tf.constant([hparams.unit_dict[c] for c in range(1, len(reverse_dict)-4+1)])
 
         self._global_step = tf.Variable(0, trainable=False, name='global_step')
 
@@ -450,7 +450,7 @@ class Seq2SeqUnimodalDecoder(object):
         output, fstate, fseqlen = seq2seq.dynamic_decode(
             beam_decoder,
             output_time_major=False,
-            impute_finished=True,
+            impute_finished=False,
             swap_memory=False
         )
 
@@ -478,7 +478,8 @@ class Seq2SeqUnimodalDecoder(object):
         )
 
         attn_zero = attention_cells.zero_state(
-            dtype=self._hparams.dtype, batch_size=self._batch_size
+            dtype=self._hparams.dtype,
+            batch_size=self._batch_size * self._hparams.beam_width if beam_search is True else self._batch_size
         )
         initial_state = attn_zero.clone(
             cell_state=decoder_initial_state
