@@ -213,9 +213,9 @@ class AVSR(object):
         labels_dict = {}
 
         session_outputs = [self._evaluate_model.model._decoder.inference_predicted_ids,
-                           self._evaluate_model.data[0].labels,
-                           self._evaluate_model.data[0].inputs_filenames,
-                           self._evaluate_model.data[0].labels_filenames,]
+                           self._evaluate_model.data[1].labels,
+                           self._evaluate_model.data[1].inputs_filenames,
+                           self._evaluate_model.data[1].labels_filenames,]
 
         if self._write_attention_alignment is True:
             session_outputs.append(self._evaluate_model.model.attention_summary)

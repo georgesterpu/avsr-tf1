@@ -44,10 +44,8 @@ class Seq2SeqUnimodalDecoder(object):
         # create model
         self._add_special_symbols()
         self._init_embedding()
-        self._construct_decoder_initial_state()
         self._prepare_attention_memories()
         self._init_decoder()
-
 
     def _add_special_symbols(self):
 
@@ -92,6 +90,8 @@ class Seq2SeqUnimodalDecoder(object):
                 base_gpu=0  # decoder runs on a single GPU
             )
 
+            self._construct_decoder_initial_state()
+
             self._dense_layer = Dense(self._vocab_size,
                                       name='my_dense',
                                       dtype=self._hparams.dtype)
@@ -111,16 +111,20 @@ class Seq2SeqUnimodalDecoder(object):
 
         encoder_state = self._encoder_output.final_state
 
-        if len(self._hparams.decoder_units_per_layer) != len(self._hparams.encoder_units_per_layer):
-            ## option 1
+        if len(self._hparams.decoder_units_per_layer) == 1:
             self._decoder_initial_state = encoder_state[-1]
-            # make sure that encoder_units[-1] == decoder_units[0]
-            # to make the N layer encoder -> 1 layer decoder arch work
 
+        elif len(self._hparams.decoder_units_per_layer) != len(self._hparams.encoder_units_per_layer):
             ## option 2
-
             # self._decoder_initial_state = _project_lstm_state_tuple(
             #     encoder_state, num_units=self._hparams.decoder_units_per_layer[0])
+
+            ## option 3
+            self._decoder_initial_state = [encoder_state[-1], ]
+            for j in range(len(self._hparams.decoder_units_per_layer)-1):
+                zero_state = self._decoder_cells.zero_state(self._batch_size, self._hparams.dtype)
+                self._decoder_initial_state.append(zero_state[j])
+            self._decoder_initial_state = tuple(self._decoder_initial_state)
         else:
             self._decoder_initial_state = encoder_state
             # make sure that encoder_units[i] == decoder_units[i] for i in num_layers
@@ -203,10 +207,10 @@ class Seq2SeqUnimodalDecoder(object):
 
         if self._hparams.enable_attention is True:
             cells, initial_state = self._add_attention(self._decoder_cells, beam_search=True)
-        else:  # the non-attentive beam decoder does not need data
+        else:  # does the non-attentive beam decoder need tile_batch ?
             cells = self._decoder_cells
 
-            decoder_initial_state_tiled = seq2seq.tile_batch(
+            decoder_initial_state_tiled = seq2seq.tile_batch(  # guess so ? it compiles without it too
                 self._decoder_initial_state, multiplier=self._hparams.beam_width)
             initial_state = decoder_initial_state_tiled
 
@@ -339,9 +343,9 @@ class Seq2SeqUnimodalDecoder(object):
 
         if self._hparams.mwer_training is True:
             # self._beam_decoder_train_ids, self._beam_decoder_train_scores
-            # avg_prob = tf.reduce_mean(self._beam_decoder_train_ids, axis=[1])
-            # wers = _compute_wers(self._beam_decoder_train_ids, self._labels)
-            pass
+            avg_prob = tf.reduce_mean(self._beam_decoder_train_scores, axis=[1])
+            wers = self._compute_beam_wers(self._beam_decoder_train_ids, self._labels)
+            # pass
 
         reg_loss = 0
 
@@ -472,7 +476,7 @@ class Seq2SeqUnimodalDecoder(object):
             cell=decoder_cells,
             attention_mechanism=attention_mechanisms,
             attention_layer_size=layer_sizes,
-            initial_cell_state=decoder_initial_state,
+            # initial_cell_state=decoder_initial_state,
             alignment_history=False,
             output_attention=self._output_attention,
         )
