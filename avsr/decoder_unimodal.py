@@ -3,10 +3,12 @@ from tensorflow.contrib import seq2seq
 from .cells import build_rnn_layers
 from tensorflow.python.layers.core import Dense
 from tensorflow.python.ops import array_ops
-from tensorflow.contrib.rnn import LSTMStateTuple
 
 
 class Seq2SeqUnimodalDecoder(object):
+    r"""
+    A standard Decoder for Seq2seq models
+    """
     def __init__(self,
                  encoder_output,
                  encoder_features_len,
@@ -14,10 +16,21 @@ class Seq2SeqUnimodalDecoder(object):
                  labels_length,
                  mode,
                  hparams):
+        r"""
+        Constructor responsible with the initialisation of the decoder
+        Args:
+            encoder_output: An `EncoderData` object, holding the encoder output and the final state
+            encoder_features_len: A 1D Tensor of shape [batch_size] holding the true length of each
+              sequence from the batch
+            labels: A 2D Tensor of shape [batch_size, max_label_len] holding the ground truth
+              transcriptions. The data type should be tf.int32
+            labels_length: A 1D Tensor of shape [batch_size] holding the true length of each
+              transcription.
+            mode: A Python `String` flag for the `train` or `test` modes
+            hparams: A `tf.contrib.training.HParams` object containing necessary hyperparameters.
+        """
 
-        # member variables
         self._encoder_output = encoder_output
-
         self._encoder_features_len = encoder_features_len
 
         self._labels = labels
@@ -48,19 +61,20 @@ class Seq2SeqUnimodalDecoder(object):
         self._init_decoder()
 
     def _add_special_symbols(self):
-
+        r"""
+        Pads the GO id at the start of each label.
+        We assume that the EOS id has already been written during dataset generation.
+        """
         _GO_SLICE = tf.ones([self._batch_size, 1], dtype=tf.int32) * self._GO_ID
-
         self._labels_padded_GO = tf.concat([_GO_SLICE, self._labels], axis=1)
 
     def _init_embedding(self):
         r"""
-        Initialises the lookup matrix that translates a dense representation to a sparse one
+        Creates the embedding matrix
         If hparams.vocab_size is non-positive, then we fall back to one-hot encodings
-        :return:
         """
         if self._hparams.embedding_size <= 0:
-            self._embedding_matrix = tf.eye(self._vocab_size, dtype=self._hparams.dtype)
+            self._embedding_matrix = tf.eye(self._vocab_size, dtype=self._hparams.dtype)  # one-hot
         else:
             with tf.variable_scope("embeddings"):
 
@@ -75,9 +89,9 @@ class Seq2SeqUnimodalDecoder(object):
 
     def _init_decoder(self):
         r"""
-                Instantiates the seq2seq decoder
-                :return:
-                """
+        Builds the decoder blocks: the cells, the initial state, the output projection layer,
+        the decoding algorithm, the attention layers and the trainining optimiser
+        """
 
         with tf.variable_scope("Decoder"):
 
@@ -108,6 +122,9 @@ class Seq2SeqUnimodalDecoder(object):
                     raise Exception('The only supported algorithms are `greedy` and `beam_search`')
 
     def _construct_decoder_initial_state(self):
+        r"""
+
+        """
 
         encoder_state = self._encoder_output.final_state
 
@@ -115,26 +132,32 @@ class Seq2SeqUnimodalDecoder(object):
             self._decoder_initial_state = encoder_state[-1]
 
         elif len(self._hparams.decoder_units_per_layer) != len(self._hparams.encoder_units_per_layer):
-            ## option 2
-            # self._decoder_initial_state = _project_lstm_state_tuple(
-            #     encoder_state, num_units=self._hparams.decoder_units_per_layer[0])
+            if self._hparams.fuse_encoder_states is True:
+                self._decoder_initial_state = _project_lstm_state_tuple(
+                    encoder_state, num_units=self._hparams.decoder_units_per_layer[0])
+            else:
+                self._decoder_initial_state = [encoder_state[-1], ]
+                for j in range(len(self._hparams.decoder_units_per_layer)-1):
+                    zero_state = self._decoder_cells.zero_state(self._batch_size, self._hparams.dtype)
+                    self._decoder_initial_state.append(zero_state[j])
+                self._decoder_initial_state = tuple(self._decoder_initial_state)
 
-            ## option 3
-            self._decoder_initial_state = [encoder_state[-1], ]
-            for j in range(len(self._hparams.decoder_units_per_layer)-1):
-                zero_state = self._decoder_cells.zero_state(self._batch_size, self._hparams.dtype)
-                self._decoder_initial_state.append(zero_state[j])
-            self._decoder_initial_state = tuple(self._decoder_initial_state)
-        else:
+        else:  # decoder_state0[i] = encoder_state[i]
             self._decoder_initial_state = encoder_state
-            # make sure that encoder_units[i] == decoder_units[i] for i in num_layers
-            # to make the N layer encoder -> N layer decoder arch work
 
     def _prepare_attention_memories(self):
+        r"""
+        Optionally processes the memory attended to by the decoder
+        """
         self._encoder_memory = self._encoder_output.outputs
 
     def _create_attention_mechanisms(self, beam_search=False):
-
+        r"""
+        Creates a list of attention mechanisms (e.g. seq2seq.BahdanauAttention)
+        and also a list of ints holding the attention projection layer size
+        Args:
+            beam_search: `bool`, whether the beam-search decoding algorithm is used or not
+        """
         mechanisms = []
         layer_sizes = []
 
@@ -163,6 +186,9 @@ class Seq2SeqUnimodalDecoder(object):
         return mechanisms, layer_sizes
 
     def _build_decoder_train(self):
+        r"""
+        Builds the decoder(s) used in training
+        """
 
         self._labels_embedded = tf.nn.embedding_lookup(self._embedding_matrix, self._labels_padded_GO)
 
@@ -172,7 +198,10 @@ class Seq2SeqUnimodalDecoder(object):
             self._beam_decoder_train_ids, self._beam_decoder_train_scores = self._beam_decoder_train()
 
     def _build_decoder_greedy(self):
-
+        r"""
+        Builds the greedy test decoder, which feeds the most likely decoded symbol as input for the
+        next timestep
+        """
         self._helper_greedy = seq2seq.GreedyEmbeddingHelper(
             embedding=self._embedding_matrix,
             start_tokens=tf.tile([self._GO_ID], [self._batch_size]),
@@ -196,7 +225,6 @@ class Seq2SeqUnimodalDecoder(object):
             swap_memory=False,
             maximum_iterations=self._hparams.max_label_length)
 
-        # self._result = outputs, states, lengths
         self.inference_outputs = outputs.rnn_output
         self.inference_predicted_ids = outputs.sample_id
 
@@ -204,7 +232,9 @@ class Seq2SeqUnimodalDecoder(object):
             self.attention_summary = self._create_attention_alignments_summary(states, )
 
     def _build_decoder_beam_search(self):
-
+        r"""
+        Builds a beam search test decoder
+        """
         if self._hparams.enable_attention is True:
             cells, initial_state = self._add_attention(self._decoder_cells, beam_search=True)
         else:  # does the non-attentive beam decoder need tile_batch ?
@@ -240,6 +270,18 @@ class Seq2SeqUnimodalDecoder(object):
                                     num_units,
                                     memory,
                                     memory_sequence_length):
+        r"""
+        Instantiates a seq2seq attention mechanism, also setting the _output_attention flag accordingly.
+
+        Warning: if different types of mechanisms are used within the same decoder, this function needs
+        to be refactored to return the right output_attention flag for each `AttentionWrapper` object.
+        Args:
+            attention_type: `String`, one of `bahdanau`, `luong` with optional `normed`, `scaled` or
+              `monotonic` prefixes. See code for the precise format.
+            num_units: `int`, depth of the query mechanism. See downstream documentation.
+            memory: A 3D Tensor [batch_size, Ts, num_features], the attended memory
+            memory_sequence_length: A 1D Tensor [batch_size] holding the true sequence lengths
+        """
 
         if attention_type == 'bahdanau':
             attention_mechanism = seq2seq.BahdanauAttention(
@@ -300,6 +342,9 @@ class Seq2SeqUnimodalDecoder(object):
         return attention_mechanism
 
     def _create_attention_alignments_summary(self, states):
+        r"""
+        Generates the alignment images, useful for visualisation/debugging purposes
+        """
         attention_alignment = states.alignment_history.stack()
 
         attention_images = tf.expand_dims(tf.transpose(attention_alignment, [1, 2, 0]), -1)
@@ -313,29 +358,26 @@ class Seq2SeqUnimodalDecoder(object):
         return attention_summary
 
     def get_predictions(self):
+        r"""
+        Returns the predictions made by the decoder.
+        When beam_search is True, returns the top beam alone
+        """
         return self.inference_predicted_ids
 
     def _init_optimiser(self):
         r"""
-            Computes the batch_loss function to be minimised
-            :return:
-            """
-        # emb = tf.constant([0.0, 3.17, 0.64, 1.70, 14.28, 3.44, 8.33, 5.52, 2.29, 0.31, 0.47, 2.06, 1.40, 14.28, 14.28])
-        # def elem_iter(y): return tf.nn.embedding_lookup(emb, y)
-        # def row_iter(x): return elem_iter(x)
-        # self._loss_weights2 = tf.map_fn(row_iter, self._labels, dtype=tf.float32)
+        Computes the batch_loss function to be minimised
+        """
 
         self._loss_weights = tf.sequence_mask(
             lengths=self._labels_len,
             dtype=self._hparams.dtype
         )
-        # self._loss_weights = tf.multiply(self._loss_weights, self._loss_weights2)
 
         if self._hparams.label_skipping is True and self._mode == 'train':
             # diff = tf.shape(self._labels)[-1] - tf.shape(self._loss_weights)[-1]
             self._labels = self._labels[:,:tf.shape(self._loss_weights)[-1]]
 
-        # self._labels = tf.Print(self._labels, [diff], summarize=1000)
         self.batch_loss = seq2seq.sequence_loss(
             logits=self._basic_decoder_train_outputs.rnn_output,
             targets=self._labels,
@@ -354,10 +396,9 @@ class Seq2SeqUnimodalDecoder(object):
             reg = tf.contrib.layers.l2_regularizer(scale=self._hparams.recurrent_regularisation)
             reg_loss = tf.contrib.layers.apply_regularization(reg, regularisable_vars)
 
-        # if 'cnn' in self._hparams.video_processing:
         if self._hparams.video_processing is not None:
             if 'cnn' in self._hparams.video_processing:
-                # !!we regularise the cnn vars by specifying a regulariser in conv2d!!
+                # we regularise the cnn vars by specifying a regulariser in conv2d
                 reg_variables = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
                 reg_loss += tf.reduce_sum(reg_variables)
 
@@ -376,7 +417,7 @@ class Seq2SeqUnimodalDecoder(object):
                 learning_rate=self._hparams.learning_rate
             )
         else:
-            raise Exception('Unsupported Optimiser, try Adam')
+            raise Exception('Unsupported optimiser, try Adam')
 
         variables = tf.trainable_variables()
         gradients = tf.gradients(self.batch_loss, variables)
@@ -395,12 +436,19 @@ class Seq2SeqUnimodalDecoder(object):
                 zip(gradients, variables))
 
     def _get_trainable_vars(self, cell_type):
+        r"""
+        Returns the list of trainable variables associated with the recurrent layers
+        """
+
         cell_type = cell_type.split('_')[0]
         vars = [var for var in tf.trainable_variables() if cell_type + '_' in var.name
                 and not 'bias' in var.name]
         return vars
 
     def _basic_decoder_train(self):
+        r"""
+        Builds the standard teacher-forcing training decoder with sampling from previous predictions.
+        """
 
         helper_train = seq2seq.ScheduledEmbeddingTrainingHelper(
             inputs=self._labels_embedded,
@@ -432,13 +480,16 @@ class Seq2SeqUnimodalDecoder(object):
         return outputs, fstate, fseqlen
 
     def _beam_decoder_train(self):
+        r"""
+        Builds a beam search decoder to be used in training, along with the
+          Minimum Word Error Rate (MWER) training strategy.
+        """
 
         if self._hparams.enable_attention is True:
             cells, initial_state = self._add_attention(self._decoder_cells, beam_search=True)
         else:
             cells = self._decoder_cells
             initial_state = self._decoder_initial_state
-            # do we need to tile the initial state when beam with no attention is used?
 
         beam_decoder= seq2seq.BeamSearchDecoder(
             cell=cells,
@@ -464,6 +515,16 @@ class Seq2SeqUnimodalDecoder(object):
         return beam_ids, beam_scores
 
     def _add_attention(self, decoder_cells, beam_search=False):
+        r"""
+        Wraps the decoder_cells with an AttentionWrapper
+        Args:
+            decoder_cells: instances of `RNNCell`
+            beam_search: `bool` flag for beam search decoders
+
+        Returns:
+            attention_cells: the Attention wrapped decoder cells
+            initial_state: a proper initial state to be used with the returned cells
+        """
         attention_mechanisms, layer_sizes = self._create_attention_mechanisms(beam_search)
 
         if beam_search is True:
@@ -492,6 +553,15 @@ class Seq2SeqUnimodalDecoder(object):
         return attention_cells, initial_state
 
     def _compute_beam_wers(self, beam_ids, labels):
+        r"""
+        Code under testing, MWER
+        Args:
+            beam_ids:
+            labels:
+
+        Returns:
+
+        """
         beam_chars = tf.nn.embedding_lookup(self._char_emb, beam_ids)
         labels_chars = tf.nn.embedding_lookup(self._char_emb, labels)
         beam_strings = tf.string_join(tf.split(beam_chars, beam_chars.shape[1], axis=1), '')
@@ -501,8 +571,18 @@ class Seq2SeqUnimodalDecoder(object):
 
         return beam_eds
 
-def _project_lstm_state_tuple(state_tuple, num_units):
 
+def _project_lstm_state_tuple(state_tuple, num_units):
+    r"""
+    Concatenates all the `c` and `h` members from a list of `LSTMStateTuple`
+      and projects them to a space of dimension `num_units`
+    Args:
+        state_tuple: a list of `LSTMStateTuple` objects
+        num_units: output dimension
+
+    Returns:
+        projected_state: a single `LSTMStateTuple` with `c` and `h` of dimension `num_units`
+    """
     state_proj_layer = Dense(num_units,
                             name='state_projection',
                             use_bias=False,

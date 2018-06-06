@@ -92,6 +92,7 @@ class AVSR(object):
             encoder_units_per_layer=encoder_units_per_layer,
             decoder_units_per_layer=decoder_units_per_layer,
             mwer_training=mwer_training,
+            fuse_encoder_states=False,  # feature under testing
             enable_attention=enable_attention,
             attention_type=attention_type,
             use_dropout=use_dropout,
