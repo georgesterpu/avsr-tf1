@@ -112,8 +112,13 @@ class Seq2SeqEncoder(object):
                 # else:
                 encoder_state = []
                 for layer in range(len(bi_state[0])):
-                    encoder_state.append(bi_state[0][layer])  # fw
-                    encoder_state.append(bi_state[1][layer])  # bw
+                    # encoder_state.append(bi_state[0][layer])  # fw
+                    # encoder_state.append(bi_state[1][layer])  # bw
+                    fw_state = bi_state[0][layer]
+                    bw_state = bi_state[1][layer]
+                    cat = tf.concat([fw_state, bw_state], axis=-1)
+                    proj = tf.layers.dense(cat, units=self._hparams.decoder_units_per_layer[0], use_bias=False)
+                    encoder_state.append(proj)
                 encoder_state = tuple(encoder_state)
 
                 self._encoder_final_state = encoder_state
