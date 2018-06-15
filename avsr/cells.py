@@ -1,5 +1,5 @@
 from tensorflow.contrib.rnn import MultiRNNCell,DeviceWrapper, DropoutWrapper, \
-    LSTMCell, GRUCell, LSTMBlockCell, UGRNNCell
+    LSTMCell, GRUCell, LSTMBlockCell, UGRNNCell, NASCell
 import tensorflow as tf
 from tensorflow.contrib import seq2seq
 
@@ -26,6 +26,8 @@ def _build_single_cell(cell_type, num_units, use_dropout, mode, dropout_probabil
         cells = LSTMBlockCell(num_units=num_units,
                               use_peephole=True,
                               cell_clip=10.0,)
+    elif cell_type == 'nas':
+        cells = NASCell(num_units=num_units)
     else:
         raise Exception('cell type not supported: {}'.format(cell_type))
 
