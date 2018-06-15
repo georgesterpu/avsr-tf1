@@ -28,6 +28,9 @@ def _build_single_cell(cell_type, num_units, use_dropout, mode, dropout_probabil
                               cell_clip=10.0,)
     elif cell_type == 'nas':
         cells = NASCell(num_units=num_units)
+    elif cell_type == 'lstm_masked':
+        from tensorflow.contrib.model_pruning import MaskedLSTMCell
+        cells = MaskedLSTMCell(num_units=num_units)
     else:
         raise Exception('cell type not supported: {}'.format(cell_type))
 
