@@ -2,15 +2,15 @@ import tensorflow as tf
 
 
 def batch_norm_relu(inputs, is_training, data_format):
-  """Performs a batch normalization followed by a ReLU."""
-  # We set fused=True for a significant performance boost. See
-  # https://www.tensorflow.org/performance/performance_guide#common_fused_ops
-  inputs = tf.layers.batch_normalization(
-      inputs=inputs, axis=1 if data_format == 'channels_first' else -1,
-      epsilon=1e-5, momentum=0.98,
-      center=True, scale=True, training=is_training, fused=True)
-  inputs = tf.nn.relu(inputs)
-  return inputs
+    r"""Performs a batch normalization followed by a ReLU."""
+    # We set fused=True for a significant performance boost. See
+    # https://www.tensorflow.org/performance/performance_guide#common_fused_ops
+    inputs = tf.layers.batch_normalization(
+        inputs=inputs, axis=1 if data_format == 'channels_first' else -1,
+        epsilon=1e-5, momentum=0.98,
+        center=True, scale=True, training=is_training, fused=True)
+    inputs = tf.nn.relu(inputs)
+    return inputs
 
 
 def fc_as_conv(inputs, kernel, filters):
@@ -25,6 +25,7 @@ def fc_as_conv(inputs, kernel, filters):
             kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.001),
         )
 
+
 def fc_as_conv_3d(inputs, kernel, filters):
     return tf.layers.conv3d(
             inputs=inputs,
@@ -34,7 +35,7 @@ def fc_as_conv_3d(inputs, kernel, filters):
             use_bias=False,
             activation=tf.nn.relu,
             kernel_initializer=tf.variance_scaling_initializer(scale=2.0, mode='fan_in'),
-            kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.0001),
+            kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.001),
         )
 
 
@@ -62,12 +63,13 @@ def conv3d_wrapper(inputs, filters, kernel_size, strides, data_format, padding='
         data_format=data_format,
         use_bias=False,
         kernel_initializer=tf.variance_scaling_initializer(scale=2.0, mode='fan_in'),
-        kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.0001),
+        kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.001),
     )
 
 
 def projection_shortcut(inputs, filters, strides, data_format, padding='same'):
     return conv2d_wrapper(inputs, filters, (1, 1), strides, data_format, padding=padding)
+
 
 def projection_shortcut_3d(inputs, filters, strides, data_format, padding='same'):
     return conv3d_wrapper(inputs, filters, (1, 1, 1), strides, data_format, padding=padding)
