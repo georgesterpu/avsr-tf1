@@ -1,7 +1,8 @@
 from tensorflow.contrib.rnn import MultiRNNCell,DeviceWrapper, DropoutWrapper, \
-    LSTMCell, GRUCell, LSTMBlockCell, UGRNNCell, NASCell
+    LSTMCell, GRUCell, LSTMBlockCell, UGRNNCell, NASCell, HighwayWrapper  #, ResidualWrapper
 import tensorflow as tf
 from tensorflow.contrib import seq2seq
+
 
 def _build_single_cell(cell_type, num_units, use_dropout, mode, dropout_probability, device=None):
     r"""
@@ -56,6 +57,7 @@ def build_rnn_layers(
         dropout_probability,
         mode,
         base_gpu,
+        highway_connections=False,
         as_list=False
     ):
     if base_gpu:
@@ -74,6 +76,10 @@ def build_rnn_layers(
             mode=mode,
             device=device)
 
+        if highway_connections is True and layer > 0:
+            #cell = ResidualWrapper(cell)
+            cell = HighwayWrapper(cell)
+
         cell_list.append(cell)
 
     if len(cell_list) == 1:
@@ -85,11 +91,12 @@ def build_rnn_layers(
             return cell_list
 
 
-def create_attention_mechanism(attention_type,
-                                num_units,
-                                memory,
-                                memory_sequence_length,
-                                mode):
+def create_attention_mechanism(
+        attention_type,
+        num_units,
+        memory,
+        memory_sequence_length,
+        mode):
 
     if attention_type == 'bahdanau':
         attention_mechanism = seq2seq.BahdanauAttention(

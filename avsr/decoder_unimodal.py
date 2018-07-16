@@ -381,13 +381,17 @@ class Seq2SeqUnimodalDecoder(object):
         self.batch_loss = seq2seq.sequence_loss(
             logits=self._basic_decoder_train_outputs.rnn_output,
             targets=self._labels,
-            weights=self._loss_weights)
+            weights=self._loss_weights,
+            average_across_batch=True,
+            average_across_timesteps=True)
 
         if self._hparams.mwer_training is True:
             # self._beam_decoder_train_ids, self._beam_decoder_train_scores
-            avg_prob = tf.reduce_mean(self._beam_decoder_train_scores, axis=[1])
-            wers = self._compute_beam_wers(self._beam_decoder_train_ids, self._labels)
+            # avg_prob = tf.reduce_mean(self._beam_decoder_train_scores, axis=[0, 1, 2])
+            # wers = self._compute_beam_wers(self._beam_decoder_train_ids, self._labels)
             # pass
+            # self.batch_loss += avg_prob
+            self.avgprob = tf.shape(self._beam_decoder_train_scores)
 
         reg_loss = 0
 

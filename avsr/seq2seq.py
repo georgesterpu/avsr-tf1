@@ -84,9 +84,17 @@ class Seq2SeqModel(object):
             raise Exception('labels are None')
 
         if self._hparams.architecture in ('unimodal', 'av_align'):
+
+            if audio_output is not None:
+                output = audio_output
+                features_len = audio_len
+            else:
+                output = video_output
+                features_len = video_len
+
             self._decoder = Seq2SeqUnimodalDecoder(
-                encoder_output=audio_output,
-                encoder_features_len=audio_len,
+                encoder_output=output,
+                encoder_features_len=features_len,
                 labels=labels,
                 labels_length=labels_length,
                 mode=self._mode,
@@ -109,6 +117,7 @@ class Seq2SeqModel(object):
 
         self.train_op = self._decoder.train_op if self._mode == 'train' else None
         self.batch_loss = self._decoder.batch_loss if self._mode == 'train' else None
+        # self.avgprob = self._decoder.avgprob if self._mode == 'train' else None
 
     def extract_results(self):
 

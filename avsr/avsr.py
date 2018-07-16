@@ -38,10 +38,11 @@ class AVSR(object):
                  input_dense_layers=(0,),
                  architecture='unimodal',
                  encoder_type='unidirectional',
+                 highway_encoder=False,
                  cell_type='lstm',
                  recurrent_regularisation=0.0001,
                  encoder_units_per_layer=(128, 128,),
-                 decoder_units_per_layer=(256,),
+                 decoder_units_per_layer=(128,),
                  mwer_training=False,
                  enable_attention=True,
                  attention_type=(('scaled_luong',)*1, ('scaled_luong')*1),
@@ -87,6 +88,7 @@ class AVSR(object):
             input_dense_layers=input_dense_layers,
             encoder_type=encoder_type,
             architecture=architecture,
+            highway_encoder=highway_encoder,
             cell_type=cell_type,
             recurrent_regularisation=recurrent_regularisation,
             encoder_units_per_layer=encoder_units_per_layer,
@@ -143,6 +145,7 @@ class AVSR(object):
               num_epochs=400,
               try_restore_latest_checkpoint=False
               ):
+
         checkpoint_dir = path.join('checkpoints', path.split(logfile)[-1])
         checkpoint_path = path.join(checkpoint_dir, 'checkpoint.ckp')
         makedirs(path.dirname(checkpoint_dir), exist_ok=True)
@@ -214,9 +217,9 @@ class AVSR(object):
         labels_dict = {}
 
         session_outputs = [self._evaluate_model.model._decoder.inference_predicted_ids,
-                           self._evaluate_model.data[1].labels,
-                           self._evaluate_model.data[1].inputs_filenames,
-                           self._evaluate_model.data[1].labels_filenames,]
+                           self._evaluate_model.data[0].labels,
+                           self._evaluate_model.data[0].inputs_filenames,
+                           self._evaluate_model.data[0].labels_filenames,]
 
         if self._write_attention_alignment is True:
             session_outputs.append(self._evaluate_model.model.attention_summary)
@@ -370,7 +373,7 @@ class AVSR(object):
                 unit_dict=self._hparams.unit_dict,
                 shuffle=True if mode == 'train' else False,
                 reverse_input=False,
-                bucket_width=15,  # 0.5sec at 30 fps,
+                bucket_width=45,  # 1.5sec at 30 fps,
             )
             video_data, audio_data = self._parse_multimodal_iterator(iterator)
 

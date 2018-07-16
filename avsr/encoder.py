@@ -60,6 +60,7 @@ class Seq2SeqEncoder(object):
                     use_dropout=self._hparams.use_dropout,
                     dropout_probability=self._hparams.dropout_probability,
                     mode=self._mode,
+                    highway_connections=self._hparams.highway_encoder,
                     base_gpu=self._gpu_id)
 
                 self._encoder_outputs, self._encoder_final_state = tf.nn.dynamic_rnn(
@@ -107,10 +108,8 @@ class Seq2SeqEncoder(object):
                 )
 
                 self._encoder_outputs = tf.concat(bi_outputs, -1)
-                # if num_bi_layers != 1:
-                #     self._encoder_final_state = bi_state
-                # else:
                 encoder_state = []
+
                 for layer in range(len(bi_state[0])):
                     # encoder_state.append(bi_state[0][layer])  # fw
                     # encoder_state.append(bi_state[1][layer])  # bw
