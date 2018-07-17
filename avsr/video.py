@@ -181,7 +181,8 @@ def my_resnet_cnn():
         #                                        random_contrast(img))))),
         #                        inputs, back_prop=False, parallel_iterations=64)
 
-        flow = (inputs * 2) - 1
+        # flow = (inputs * 2) - 1
+        flow = inputs  ## the record file should contain already normalised pixel values
 
         flow = conv2d_wrapper(flow, cnn_filters[0], (3, 3), 1, data_format=data_format)
         flow = batch_norm_relu(flow, is_training, data_format)
