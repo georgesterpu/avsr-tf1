@@ -42,11 +42,12 @@ def _strip_extra_chars(prediction):
     return [value for value in prediction if value not in ('EOS', 'END', 'MASK')]
 
 
-def write_sequences_to_labelfile(sequence_dict, fname):
+def write_sequences_to_labelfile(sequence_dict, fname, original_dict):
     items = []
     for (k, v) in sequence_dict.items():
-        label_str = ''.join(_strip_extra_chars(v)) + '\n'
-        items.append(' '.join([k, label_str]))
+        label_str = ''.join(_strip_extra_chars(v))
+        truth = ''.join(_strip_extra_chars(original_dict[k]))
+        items.append(' '.join([k, label_str, '[{}]'.format(truth)]) + '\n')
 
     with open(fname, 'w') as f:
         f.writelines(items)

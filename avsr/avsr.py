@@ -265,7 +265,7 @@ class AVSR(object):
 
         outdir = path.join('predictions', path.split(path.split(checkpoint_path)[0])[-1])
         makedirs(outdir, exist_ok=True)
-        write_sequences_to_labelfile(predictions_dict, path.join(outdir, 'predicted_epoch_{}.mlf'.format(epoch)))
+        write_sequences_to_labelfile(predictions_dict, path.join(outdir, 'predicted_epoch_{}.mlf'.format(epoch)), labels_dict)
 
         return error_rate
 
