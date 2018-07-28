@@ -47,9 +47,6 @@ class Seq2SeqUnimodalDecoder(object):
                                                          dtype=self._hparams.dtype)
         self._vocab_size = len(hparams.unit_dict) - 1  # excluding END
 
-        if self._hparams.mwer_training is True:
-            self._char_emb = tf.constant([hparams.unit_dict[c] for c in range(1, len(reverse_dict)-4+1)])
-
         self._global_step = tf.Variable(0, trainable=False, name='global_step')
 
         self._batch_size, _ = tf.unstack(tf.shape(self._labels))
@@ -128,22 +125,26 @@ class Seq2SeqUnimodalDecoder(object):
 
         encoder_state = self._encoder_output.final_state
 
-        if len(self._hparams.decoder_units_per_layer) == 1:
-            self._decoder_initial_state = encoder_state[-1]
+        enc_layers = len(self._hparams.encoder_units_per_layer)
+        dec_layers = len(self._hparams.decoder_units_per_layer)
 
-        elif len(self._hparams.decoder_units_per_layer) != len(self._hparams.encoder_units_per_layer):
-            if self._hparams.fuse_encoder_states is True:
-                self._decoder_initial_state = _project_lstm_state_tuple(
-                    encoder_state, num_units=self._hparams.decoder_units_per_layer[0])
-            else:
+        if enc_layers == 1:
+            encoder_state = [encoder_state, ]
+
+        if dec_layers == 1:  # N - 1
+            self._decoder_initial_state = encoder_state[-1]
+        else:
+            if self._hparams.bijective_state_copy is True:  # N - N
+                if enc_layers != dec_layers:
+                    raise ValueError('The bijective decoder initialisation scheme requires'
+                                     'equal number of layers and units in both RNNs')
+                self._decoder_initial_state = encoder_state  # list of objects
+            else:  # M - N
                 self._decoder_initial_state = [encoder_state[-1], ]
-                for j in range(len(self._hparams.decoder_units_per_layer)-1):
+                for j in range(dec_layers - 1):
                     zero_state = self._decoder_cells.zero_state(self._batch_size, self._hparams.dtype)
                     self._decoder_initial_state.append(zero_state[j])
                 self._decoder_initial_state = tuple(self._decoder_initial_state)
-
-        else:  # decoder_state0[i] = encoder_state[i]
-            self._decoder_initial_state = encoder_state
 
     def _prepare_attention_memories(self):
         r"""
@@ -193,9 +194,6 @@ class Seq2SeqUnimodalDecoder(object):
         self._labels_embedded = tf.nn.embedding_lookup(self._embedding_matrix, self._labels_padded_GO)
 
         self._basic_decoder_train_outputs, self._final_states, self._final_seq_lens = self._basic_decoder_train()
-
-        if self._hparams.mwer_training is True:
-            self._beam_decoder_train_ids, self._beam_decoder_train_scores = self._beam_decoder_train()
 
     def _build_decoder_greedy(self):
         r"""
@@ -384,14 +382,6 @@ class Seq2SeqUnimodalDecoder(object):
             weights=self._loss_weights,
             average_across_batch=True,
             average_across_timesteps=True)
-
-        if self._hparams.mwer_training is True:
-            # self._beam_decoder_train_ids, self._beam_decoder_train_scores
-            # avg_prob = tf.reduce_mean(self._beam_decoder_train_scores, axis=[0, 1, 2])
-            # wers = self._compute_beam_wers(self._beam_decoder_train_ids, self._labels)
-            # pass
-            # self.batch_loss += avg_prob
-            self.avgprob = tf.shape(self._beam_decoder_train_scores)
 
         reg_loss = 0
 

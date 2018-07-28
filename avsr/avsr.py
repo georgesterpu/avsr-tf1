@@ -94,7 +94,7 @@ class AVSR(object):
             encoder_units_per_layer=encoder_units_per_layer,
             decoder_units_per_layer=decoder_units_per_layer,
             mwer_training=mwer_training,
-            fuse_encoder_states=False,  # feature under testing
+            bijective_state_copy=False,  # feature under testing
             enable_attention=enable_attention,
             attention_type=attention_type,
             use_dropout=use_dropout,
@@ -216,10 +216,17 @@ class AVSR(object):
         predictions_dict = {}
         labels_dict = {}
 
+        if self._hparams.video_processing is not None:
+            data = self._evaluate_model.data[0]
+        elif self._hparams.audio_processing is not None:
+            data = self._evaluate_model.data[1]
+        else:
+            raise ValueError('At least one of A/V streams must be enabled')
+
         session_outputs = [self._evaluate_model.model._decoder.inference_predicted_ids,
-                           self._evaluate_model.data[0].labels,
-                           self._evaluate_model.data[0].inputs_filenames,
-                           self._evaluate_model.data[0].labels_filenames,]
+                           data.labels,
+                           data.inputs_filenames,
+                           data.labels_filenames,]
 
         if self._write_attention_alignment is True:
             session_outputs.append(self._evaluate_model.model.attention_summary)
