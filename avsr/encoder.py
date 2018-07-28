@@ -72,11 +72,9 @@ class Seq2SeqEncoder(object):
                     dtype=self._hparams.dtype,
                     scope=scope,
                     )
-                # self._encoder_final_state = self._encoder_final_state[-1]
 
             elif self._hparams.encoder_type == 'bidirectional':
 
-                # num_bi_layers = max(1, int(len(self._hparams.encoder_units_per_layer)/2))
                 self._fw_cells = build_rnn_layers(
                     cell_type=self._hparams.cell_type,
                     num_units_per_layer=self._hparams.encoder_units_per_layer,
@@ -84,7 +82,7 @@ class Seq2SeqEncoder(object):
                     dropout_probability=self._hparams.dropout_probability,
                     mode=self._mode,
                     base_gpu=self._gpu_id
-                )  # note that we half the num_layers
+                )
 
                 self._bw_cells = build_rnn_layers(
                     cell_type=self._hparams.cell_type,

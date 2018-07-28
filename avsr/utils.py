@@ -2,6 +2,7 @@
 
 def compute_wer(predictions_dict, ground_truth_dict, split_words=False):
     wer = 0
+    # err_dict = dict()
     for fname, prediction in predictions_dict.items():
         prediction = _strip_extra_chars(prediction)
         ground_truth = _strip_extra_chars(ground_truth_dict[fname])
@@ -10,7 +11,12 @@ def compute_wer(predictions_dict, ground_truth_dict, split_words=False):
             prediction = ''.join(prediction).split()
             ground_truth = ''.join(ground_truth).split()
 
-        wer += levenshtein(ground_truth, prediction) / float(len(ground_truth))
+        er = levenshtein(ground_truth, prediction) / float(len(ground_truth))
+        # if er > 0.5:
+        #     print(fname + ' ' + ''.join(ground_truth) + ' ; ' + ''.join(prediction))
+        # err_dict[fname] = er
+        wer += er
+
 
     return wer / float(len(predictions_dict))
 

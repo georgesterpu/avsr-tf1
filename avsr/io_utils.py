@@ -73,7 +73,7 @@ def _parse_labels_function(example, unit_dict):
     return labels, labels_length, context_parsed["filename"]
 
 
-def make_iterator_from_one_record(data_record, label_record, unit_dict, batch_size, shuffle=False, reverse_input=False, bucket_width=-1, num_cores=8):
+def make_iterator_from_one_record(data_record, label_record, unit_dict, batch_size, shuffle=False, reverse_input=False, bucket_width=-1, num_cores=4):
 
     input_shape, content_type = _get_input_shape_from_record(data_record)
     # unit = _get_unit_from_record(label_record)
