@@ -14,9 +14,7 @@ def _build_single_cell(cell_type, num_units, use_dropout, mode, dropout_probabil
         cells = LSTMCell(num_units=num_units,
                          use_peepholes=True,
                          cell_clip=None,
-                         initializer=tf.variance_scaling_initializer(),
-
-                         )
+                         initializer=tf.variance_scaling_initializer())
     elif cell_type == 'gru':
         cells = GRUCell(num_units=num_units,
                         kernel_initializer=tf.variance_scaling_initializer(),
@@ -60,7 +58,7 @@ def build_rnn_layers(
         highway_connections=False,
         as_list=False
     ):
-    if base_gpu:
+    if base_gpu is not None:
         device = '/gpu:{}'.format(base_gpu)
     else:
         device = None
