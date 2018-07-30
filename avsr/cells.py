@@ -1,5 +1,5 @@
 from tensorflow.contrib.rnn import MultiRNNCell,DeviceWrapper, DropoutWrapper, \
-    LSTMCell, GRUCell, LSTMBlockCell, UGRNNCell, NASCell, HighwayWrapper  #, ResidualWrapper
+    LSTMCell, GRUCell, LSTMBlockCell, UGRNNCell, NASCell, HighwayWrapper, ResidualWrapper
 import tensorflow as tf
 from tensorflow.contrib import seq2seq
 
@@ -55,6 +55,7 @@ def build_rnn_layers(
         dropout_probability,
         mode,
         base_gpu,
+        residual_connections=False,
         highway_connections=False,
         as_list=False
     ):
@@ -75,8 +76,9 @@ def build_rnn_layers(
             device=device)
 
         if highway_connections is True and layer > 0:
-            #cell = ResidualWrapper(cell)
             cell = HighwayWrapper(cell)
+        elif residual_connections is True and layer > 0:
+            cell = ResidualWrapper(cell)
 
         cell_list.append(cell)
 

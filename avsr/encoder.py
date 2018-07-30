@@ -60,6 +60,7 @@ class Seq2SeqEncoder(object):
                     use_dropout=self._hparams.use_dropout,
                     dropout_probability=self._hparams.dropout_probability,
                     mode=self._mode,
+                    residual_connections=self._hparams.residual_encoder,
                     highway_connections=self._hparams.highway_encoder,
                     base_gpu=self._gpu_id)
 
