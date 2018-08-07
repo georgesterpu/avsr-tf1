@@ -1,6 +1,6 @@
 import avsr
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = "1"
+os.environ['CUDA_VISIBLE_DEVICES'] = "0"
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = "2"  # ERROR
 import sys
 
@@ -15,23 +15,23 @@ def main(argv):
         unit_file='/run/media/john_tukey/download/datasets/MV-LRS/misc/character_list',
         video_processing='resnet_cnn',
         #cnn_filters=(12, 32, 64, 96),
-        cnn_filters=(8, 16, 32, 64),
-        cnn_dense_units=16,
+        cnn_filters=(8, 16, 24, 32, 64),
+        cnn_dense_units=64,
         batch_normalisation=True,
-        video_train_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords2/rgb36lips_train_sd.tfrecord',
-        video_test_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords2/rgb36lips_test_sd.tfrecord',
+        video_train_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords3/rgb36lips_newtrain.tfrecord',
+        video_test_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords3/rgb36lips_newtest.tfrecord',
         audio_processing=None,
         audio_train_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords2/logmel_train_sd_stack_clean.tfrecord',
         audio_test_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords2/logmel_test_sd_stack_clean.tfrecord',
-        labels_train_record ='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords2/characters_train_sd.tfrecord',
-        labels_test_record ='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords2/characters_test_sd.tfrecord',
+        labels_train_record ='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords3/characters_newtrain.tfrecord',
+        labels_test_record ='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords3/characters_newtest.tfrecord',
         encoder_type='unidirectional',
         architecture='unimodal',
         clip_gradients=True,
         max_gradient_norm=1.0,
         recurrent_regularisation=0.00001,
         cell_type='gru',
-        residual_encoder=True,
+        highway_encoder=True,
         sampling_probability_outputs=0.1,
         #dropout_probability=(0.7, 0.7, 0.7),
         decoding_algorithm='beam_search',
@@ -55,7 +55,7 @@ def main(argv):
 
     experiment.train(
         num_epochs=num_epochs,
-        logfile='./logs/tcd_vid_to_chars_sd_16denseunits',
+        logfile='./logs/tcd_vid_to_chars_split_best_worst_alldata_5L',
         try_restore_latest_checkpoint=True
     )
 

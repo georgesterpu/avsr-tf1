@@ -110,13 +110,22 @@ class Seq2SeqEncoder(object):
                 encoder_state = []
 
                 for layer in range(len(bi_state[0])):
-                    # encoder_state.append(bi_state[0][layer])  # fw
-                    # encoder_state.append(bi_state[1][layer])  # bw
                     fw_state = bi_state[0][layer]
                     bw_state = bi_state[1][layer]
-                    cat = tf.concat([fw_state, bw_state], axis=-1)
-                    proj = tf.layers.dense(cat, units=self._hparams.decoder_units_per_layer[0], use_bias=False)
-                    encoder_state.append(proj)
+
+                    if self._hparams.cell_type == 'gru':
+                        cat = tf.concat([fw_state, bw_state], axis=-1)
+                        proj = tf.layers.dense(cat, units=self._hparams.decoder_units_per_layer[0], use_bias=False)
+                        encoder_state.append(proj)
+                    elif self._hparams.cell_type == 'lstm':
+                        cat_c = tf.concat([fw_state.c, bw_state.c], axis=-1)
+                        cat_h = tf.concat([fw_state.h, bw_state.h], axis=-1)
+                        proj_c = tf.layers.dense(cat_c, units=self._hparams.decoder_units_per_layer[0], use_bias=False)
+                        proj_h = tf.layers.dense(cat_h, units=self._hparams.decoder_units_per_layer[0], use_bias=False)
+                        state_tuple = tf.contrib.rnn.LSTMStateTuple(c=proj_c, h=proj_h)
+                        encoder_state.append(state_tuple)
+                    else:
+                        raise ValueError('BiRNN fusion strategy not implemented for this cell')
                 encoder_state = tuple(encoder_state)
 
                 self._encoder_final_state = encoder_state
