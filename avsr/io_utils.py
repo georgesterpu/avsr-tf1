@@ -79,7 +79,7 @@ def make_iterator_from_one_record(data_record, label_record, unit_dict, batch_si
     # unit = _get_unit_from_record(label_record)
 
     dataset1 = tf.data.TFRecordDataset(data_record)
-    dataset1 = dataset1.map(lambda proto: _parse_input_function(proto, input_shape, content_type),num_parallel_calls=num_cores)
+    dataset1 = dataset1.map(lambda proto: _parse_input_function(proto, input_shape, content_type), num_parallel_calls=num_cores)
 
     dataset2 = tf.data.TFRecordDataset(label_record)
     dataset2 = dataset2.map(lambda proto: _parse_labels_function(proto, unit_dict), num_parallel_calls=num_cores)
@@ -118,7 +118,7 @@ def make_iterator_from_one_record(data_record, label_record, unit_dict, batch_si
         dataset = tf.data.Dataset.apply(dataset, tf.contrib.data.group_by_window(
             key_func=key_func, reduce_func=reduce_func, window_size=batch_size))
 
-    dataset = dataset.prefetch(num_cores)
+    dataset = dataset.prefetch(batch_size)
 
     iterator = dataset.make_initializable_iterator()
     (inputs, inputs_len, fname1), (labels, labels_len, fname2) = iterator.get_next()
@@ -134,7 +134,7 @@ def make_iterator_from_one_record(data_record, label_record, unit_dict, batch_si
     )
 
 
-def make_iterator_from_two_records(video_record, audio_record, label_record, batch_size, unit_dict, shuffle=False, reverse_input=False, bucket_width=-1, num_cores=8):
+def make_iterator_from_two_records(video_record, audio_record, label_record, batch_size, unit_dict, shuffle=False, reverse_input=False, bucket_width=-1, num_cores=4):
     # TODO: this function needs a generalisation to lists of data records
 
     # unit = _get_unit_from_record(label_record)
@@ -188,7 +188,8 @@ def make_iterator_from_two_records(video_record, audio_record, label_record, bat
         dataset = tf.data.Dataset.apply(dataset, tf.contrib.data.group_by_window(
             key_func=key_func, reduce_func=reduce_func, window_size=batch_size))
 
-    dataset = dataset.prefetch(num_cores)
+    dataset = dataset.prefetch(batch_size)
+
     iterator = dataset.make_initializable_iterator()
     ((vid_inputs, vid_inputs_len, vid_fname1), (aud_inputs, aud_inputs_len, aud_fname1)), (labels, labels_len, labels_fname2) = iterator.get_next()
 

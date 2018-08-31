@@ -1,5 +1,6 @@
-from tensorflow.contrib.rnn import MultiRNNCell,DeviceWrapper, DropoutWrapper, \
-    LSTMCell, GRUCell, LSTMBlockCell, UGRNNCell, NASCell, HighwayWrapper, ResidualWrapper
+from tensorflow.contrib.rnn import MultiRNNCell, DeviceWrapper, DropoutWrapper, \
+    LSTMCell, GRUCell, LSTMBlockCell, UGRNNCell, NASCell, GRUBlockCellV2, \
+    HighwayWrapper, ResidualWrapper
 import tensorflow as tf
 from tensorflow.contrib import seq2seq
 
@@ -18,13 +19,16 @@ def _build_single_cell(cell_type, num_units, use_dropout, mode, dropout_probabil
     elif cell_type == 'gru':
         cells = GRUCell(num_units=num_units,
                         kernel_initializer=tf.variance_scaling_initializer(),
-                        bias_initializer=tf.variance_scaling_initializer())
+                        bias_initializer=tf.variance_scaling_initializer(),
+                        )
     elif cell_type == 'ugrnn':
         cells = UGRNNCell(num_units)
     elif cell_type == 'lstm_block':
         cells = LSTMBlockCell(num_units=num_units,
                               use_peephole=True,
-                              cell_clip=10.0,)
+                              cell_clip=None)
+    elif cell_type == 'gru_block':
+        cells = GRUBlockCellV2(num_units=num_units)
     elif cell_type == 'nas':
         cells = NASCell(num_units=num_units)
     elif cell_type == 'lstm_masked':

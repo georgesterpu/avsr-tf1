@@ -113,7 +113,7 @@ class AVSR(object):
             max_gradient_norm=max_gradient_norm,
             num_gpus=num_gpus,
             write_attention_alignment=write_attention_alignment,
-            dtype=dtype
+            dtype=dtype,
         )
 
         self._hparams_audio = tf.contrib.training.HParams(
@@ -382,7 +382,7 @@ class AVSR(object):
                 unit_dict=self._hparams.unit_dict,
                 shuffle=True if mode == 'train' else False,
                 reverse_input=False,
-                bucket_width=45,  # 1.5sec at 30 fps,
+                bucket_width=45,  # video frame rate is 30 fps
             )
             video_data, audio_data = self._parse_multimodal_iterator(iterator)
 
@@ -395,7 +395,7 @@ class AVSR(object):
                     unit_dict=self._hparams.unit_dict,
                     shuffle=True if mode == 'train' else False,
                     reverse_input=False,
-                    bucket_width=15,  # 0.5sec at 30 fps
+                    bucket_width=45,  # video frame rate is 30 fps
                 )
 
                 video_data = self._parse_iterator(video_iterator)
@@ -408,7 +408,7 @@ class AVSR(object):
                     shuffle=True if mode == 'train' else False,
                     unit_dict=self._hparams.unit_dict,
                     reverse_input=False,
-                    bucket_width=30,  # 0.6 sec at 30 mfcc/sec
+                    bucket_width=45,  # audio feature rate is 30 mfcc/sec
                 )
 
                 audio_data = self._parse_iterator(audio_iterator)

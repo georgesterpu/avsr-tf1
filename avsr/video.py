@@ -88,6 +88,7 @@ def residual_block(inputs, filters, kernel_size, strides, data_format, is_traini
     data_format
     is_training
     project_shortcut
+    skip_bn
 
     Returns
     -------
@@ -131,13 +132,13 @@ def my_2d_cnn():
         # inputs = tf.transpose(inputs, [0, 3, 1, 2])
         flow = (inputs * 2) - 1
 
-        ### debug images
+        # debug images
         # dbg_img = tf.summary.image(
         #     name="input_images",
         #     tensor=layer_input,
         #     max_outputs=1000
         # )
-        ###
+        #
 
         for layer_id, num_filters in enumerate(cnn_filters):
 
@@ -154,7 +155,7 @@ def my_2d_cnn():
         # conv_flat = tf.contrib.layers.flatten(layer_output)
 
         final = fc_as_conv(flow, flow.get_shape().as_list()[1:-1], cnn_dense_units)
-        final = tf.squeeze(final, axis=[1,2])
+        final = tf.squeeze(final, axis=[1, 2])
 
         return final
 
@@ -182,7 +183,7 @@ def my_resnet_cnn():
         #                        inputs, back_prop=False, parallel_iterations=64)
 
         # flow = (inputs * 2) - 1
-        flow = inputs  ## the record file should contain already normalised pixel values
+        flow = inputs  # the record file should contain already normalised pixel values
 
         flow = conv2d_wrapper(flow, cnn_filters[0], (3, 3), 1, data_format=data_format)
         flow = batch_norm_relu(flow, is_training, data_format)
@@ -213,13 +214,13 @@ def my_3d_cnn():
         flow = batch_norm_relu(flow, is_training, data_format)
 
         flow = residual_block_3d(flow, cnn_filters[0], (3, 3, 3), 1, data_format, is_training, project_shortcut=False,
-                              skip_bn=True)
+                                 skip_bn=True)
 
         for layer_id, num_filters in enumerate(cnn_filters[1:]):
             flow = residual_block_3d(flow, num_filters, (3, 3, 3), (1, 2, 2), data_format, is_training, project_shortcut=True)
             # flow = residual_block(flow, num_filters, (3, 3), 1, data_format, is_training, project_shortcut=False)
 
-        final = fc_as_conv_3d(flow,[1] + flow.get_shape().as_list()[2:-1], cnn_dense_units)
+        final = fc_as_conv_3d(flow, [1] + flow.get_shape().as_list()[2:-1], cnn_dense_units)
         final = tf.squeeze(final, axis=[2, 3])
 
         return final
@@ -254,6 +255,5 @@ def cnn_layers(inputs, cnn_type, is_training, cnn_filters, cnn_dense_units=128):
             outputs = model(inputs, is_training=is_training, cnn_dense_units=cnn_dense_units, cnn_filters=cnn_filters)
     else:
         raise Exception('undefined CNN, did you mean `resnet_cnn` ?')
-
 
     return outputs
