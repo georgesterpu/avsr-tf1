@@ -117,7 +117,9 @@ class Seq2SeqModel(object):
 
         self.train_op = self._decoder.train_op if self._mode == 'train' else None
         self.batch_loss = self._decoder.batch_loss if self._mode == 'train' else None
-        # self.avgprob = self._decoder.avgprob if self._mode == 'train' else None
+
+        #  Here you may add other variables for easy debugging when running sessions
+        # self.dbg = self._decoder._basic_decoder_train_outputs if self._mode == 'train' else None
 
     def extract_results(self):
 
