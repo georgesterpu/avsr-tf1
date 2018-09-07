@@ -78,16 +78,16 @@ def make_iterator_from_one_record(data_record, label_record, unit_dict, batch_si
     input_shape, content_type = _get_input_shape_from_record(data_record)
     # unit = _get_unit_from_record(label_record)
 
-    dataset1 = tf.data.TFRecordDataset(data_record)
+    dataset1 = tf.data.TFRecordDataset(data_record, num_parallel_reads=num_cores)
     dataset1 = dataset1.map(lambda proto: _parse_input_function(proto, input_shape, content_type), num_parallel_calls=num_cores)
 
-    dataset2 = tf.data.TFRecordDataset(label_record)
+    dataset2 = tf.data.TFRecordDataset(label_record, num_parallel_reads=num_cores)
     dataset2 = dataset2.map(lambda proto: _parse_labels_function(proto, unit_dict), num_parallel_calls=num_cores)
 
     dataset = tf.data.Dataset.zip((dataset1, dataset2))
 
     if shuffle is True:
-        dataset = dataset.shuffle(buffer_size=5000)
+        dataset = dataset.shuffle(buffer_size=5000, reshuffle_each_iteration=True)
 
     if reverse_input is True:
         dataset = dataset.map(
@@ -100,7 +100,7 @@ def make_iterator_from_one_record(data_record, label_record, unit_dict, batch_si
             padded_shapes=(
                 (tf.TensorShape([None] + input_shape), tf.TensorShape([]), tf.TensorShape([])),  # input_shape is list
                 (tf.TensorShape([None]), tf.TensorShape([]), tf.TensorShape([]))                 # hence concatenated
-            )
+            ), drop_remainder=False,
         )
 
     if bucket_width == -1:
