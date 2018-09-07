@@ -13,34 +13,6 @@ def batch_norm_relu(inputs, is_training, data_format):
     return inputs
 
 
-def fc_as_conv(inputs, kernel, filters, data_format):
-    return tf.layers.conv2d(
-            inputs=inputs,
-            filters=filters,
-            kernel_size=kernel,
-            padding='valid',
-            use_bias=False,
-            activation=tf.nn.relu,
-            kernel_initializer=tf.variance_scaling_initializer(scale=2.0, mode='fan_in'),
-            kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.001),
-            data_format=data_format
-        )
-
-
-def fc_as_conv_3d(inputs, kernel, filters, data_format):
-    return tf.layers.conv3d(
-            inputs=inputs,
-            filters=filters,
-            kernel_size=kernel,
-            padding='valid',
-            use_bias=False,
-            activation=tf.nn.relu,
-            kernel_initializer=tf.variance_scaling_initializer(scale=2.0, mode='fan_in'),
-            kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.001),
-            data_format=data_format
-        )
-
-
 def conv2d_wrapper(inputs, filters, kernel_size, strides, data_format, padding='same', activation=None):
     return tf.layers.conv2d(
         inputs=inputs,
@@ -129,7 +101,7 @@ def residual_block_3d(inputs, filters, kernel_size, strides, data_format, is_tra
     return inputs + shortcut
 
 
-def my_2d_cnn():
+def conv2d_cnn():
 
     def model(inputs, is_training, cnn_dense_units, cnn_filters):
         data_format = 'channels_last'
@@ -156,7 +128,7 @@ def my_2d_cnn():
 
             flow = batch_norm_relu(flow, is_training, data_format)
 
-        final = fc_as_conv(flow, flow.get_shape().as_list()[1:-1], cnn_dense_units, )
+        final = conv2d_wrapper(flow, cnn_dense_units, flow.get_shape().as_list()[1:-1], (1, 1), data_format, 'valid', tf.nn.relu)
         final = tf.squeeze(final, axis=[1, 2])
 
         return final
@@ -164,7 +136,7 @@ def my_2d_cnn():
     return model
 
 
-def my_resnet_cnn():
+def resnet_cnn():
 
     def model(inputs, is_training, cnn_dense_units, cnn_filters):
         data_format = 'channels_first'
@@ -215,7 +187,7 @@ def my_resnet_cnn():
     return model
 
 
-def my_3d_cnn():
+def conv3d_cnn():
 
     def model(inputs, is_training, cnn_dense_units, cnn_filters):
         data_format = 'channels_last'
@@ -230,9 +202,10 @@ def my_3d_cnn():
 
         for layer_id, num_filters in enumerate(cnn_filters[1:]):
             flow = residual_block_3d(flow, num_filters, (3, 3, 3), (1, 2, 2), data_format, is_training, project_shortcut=True)
+            # increase depth here
             # flow = residual_block(flow, num_filters, (3, 3), 1, data_format, is_training, project_shortcut=False)
 
-        final = fc_as_conv_3d(flow, [1] + flow.get_shape().as_list()[2:-1], cnn_dense_units)
+        final = conv3d_wrapper(flow, cnn_dense_units, [1] + flow.get_shape().as_list()[2:-1], (1, 1), data_format, 'valid', tf.nn.relu)
         final = tf.squeeze(final, axis=[2, 3])
 
         return final
@@ -242,29 +215,25 @@ def my_3d_cnn():
 
 def cnn_layers(inputs, cnn_type, is_training, cnn_filters, cnn_dense_units=128):
 
-    # inputs = tf.expand_dims(inputs, axis=-1)
     bs, ts, _, _, _ = tf.unstack(tf.shape(inputs))
     _, _, height, width, chans = inputs.get_shape().as_list()
 
     if cnn_type == 'resnet_cnn':
-        with tf.device('/gpu:0'):
-            inputs = tf.reshape(inputs, shape=[-1, int(height), int(width), int(chans)])
-            model = my_resnet_cnn()
-            outputs = model(inputs, is_training=is_training, cnn_dense_units=cnn_dense_units, cnn_filters=cnn_filters)
+        inputs = tf.reshape(inputs, shape=[-1, int(height), int(width), int(chans)])
+        model = resnet_cnn()
+        outputs = model(inputs, is_training=is_training, cnn_dense_units=cnn_dense_units, cnn_filters=cnn_filters)
+        outputs = tf.reshape(outputs, [bs, ts, cnn_dense_units])  # unwrap
 
-            outputs = tf.reshape(outputs, [bs, ts, cnn_dense_units])  # unwrap
     elif cnn_type == '2dconv_cnn':
-
-        with tf.device('/gpu:0'):
-            inputs = tf.reshape(inputs, shape=[bs * ts, int(height), int(width), int(chans)])  # wrap
-            model = my_2d_cnn()
-            outputs = model(inputs, is_training=is_training, cnn_filters=cnn_filters, cnn_dense_units=cnn_dense_units)
-            outputs = tf.reshape(outputs, [bs, ts, cnn_dense_units])  # unwrap
+        inputs = tf.reshape(inputs, shape=[bs * ts, int(height), int(width), int(chans)])  # wrap
+        model = conv2d_cnn()
+        outputs = model(inputs, is_training=is_training, cnn_filters=cnn_filters, cnn_dense_units=cnn_dense_units)
+        outputs = tf.reshape(outputs, [bs, ts, cnn_dense_units])  # unwrap
 
     elif cnn_type == '3dconv_cnn':
-        with tf.device('/gpu:0'):
-            model = my_3d_cnn()
-            outputs = model(inputs, is_training=is_training, cnn_dense_units=cnn_dense_units, cnn_filters=cnn_filters)
+        model = conv3d_cnn()
+        outputs = model(inputs, is_training=is_training, cnn_dense_units=cnn_dense_units, cnn_filters=cnn_filters)
+
     else:
         raise Exception('undefined CNN, did you mean `resnet_cnn` ?')
 
