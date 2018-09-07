@@ -13,7 +13,7 @@ def batch_norm_relu(inputs, is_training, data_format):
     return inputs
 
 
-def fc_as_conv(inputs, kernel, filters):
+def fc_as_conv(inputs, kernel, filters, data_format):
     return tf.layers.conv2d(
             inputs=inputs,
             filters=filters,
@@ -23,10 +23,11 @@ def fc_as_conv(inputs, kernel, filters):
             activation=tf.nn.relu,
             kernel_initializer=tf.variance_scaling_initializer(scale=2.0, mode='fan_in'),
             kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.001),
+            data_format=data_format
         )
 
 
-def fc_as_conv_3d(inputs, kernel, filters):
+def fc_as_conv_3d(inputs, kernel, filters, data_format):
     return tf.layers.conv3d(
             inputs=inputs,
             filters=filters,
@@ -36,10 +37,11 @@ def fc_as_conv_3d(inputs, kernel, filters):
             activation=tf.nn.relu,
             kernel_initializer=tf.variance_scaling_initializer(scale=2.0, mode='fan_in'),
             kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.001),
+            data_format=data_format
         )
 
 
-def conv2d_wrapper(inputs, filters, kernel_size, strides, data_format, padding='same'):
+def conv2d_wrapper(inputs, filters, kernel_size, strides, data_format, padding='same', activation=None):
     return tf.layers.conv2d(
         inputs=inputs,
         filters=filters,
@@ -50,10 +52,11 @@ def conv2d_wrapper(inputs, filters, kernel_size, strides, data_format, padding='
         kernel_initializer=tf.variance_scaling_initializer(scale=2.0, mode='fan_in'),
         kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.001),
         data_format=data_format,
+        activation=activation
     )
 
 
-def conv3d_wrapper(inputs, filters, kernel_size, strides, data_format, padding='same'):
+def conv3d_wrapper(inputs, filters, kernel_size, strides, data_format, padding='same', activation=None):
     return tf.layers.conv3d(
         inputs=inputs,
         filters=filters,
@@ -64,6 +67,7 @@ def conv3d_wrapper(inputs, filters, kernel_size, strides, data_format, padding='
         use_bias=False,
         kernel_initializer=tf.variance_scaling_initializer(scale=2.0, mode='fan_in'),
         kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.001),
+        activation=activation
     )
 
 
@@ -152,9 +156,7 @@ def my_2d_cnn():
 
             flow = batch_norm_relu(flow, is_training, data_format)
 
-        # conv_flat = tf.contrib.layers.flatten(layer_output)
-
-        final = fc_as_conv(flow, flow.get_shape().as_list()[1:-1], cnn_dense_units)
+        final = fc_as_conv(flow, flow.get_shape().as_list()[1:-1], cnn_dense_units, )
         final = tf.squeeze(final, axis=[1, 2])
 
         return final
@@ -165,7 +167,7 @@ def my_2d_cnn():
 def my_resnet_cnn():
 
     def model(inputs, is_training, cnn_dense_units, cnn_filters):
-        data_format = 'channels_last'
+        data_format = 'channels_first'
 
         # random_flip = lambda img: tf.image.random_flip_left_right(img, seed=1001)
         # random_contrast = lambda img: tf.image.random_contrast(img, lower=0.8, upper=1.2, seed=1002)
@@ -182,8 +184,11 @@ def my_resnet_cnn():
         #                                        random_contrast(img))))),
         #                        inputs, back_prop=False, parallel_iterations=64)
 
-        # flow = (inputs * 2) - 1
-        flow = inputs  # the record file should contain already normalised pixel values
+        # flow = (inputs * 2) - 1  # the record file should contain already normalised pixel values
+        if data_format == 'channels_first':
+            flow = tf.transpose(inputs, [0, 3, 1, 2])
+        else:
+            flow = inputs
 
         flow = conv2d_wrapper(flow, cnn_filters[0], (3, 3), 1, data_format=data_format)
         flow = batch_norm_relu(flow, is_training, data_format)
@@ -195,8 +200,15 @@ def my_resnet_cnn():
             # flow = residual_block(flow, num_filters, (3, 3), 1, data_format, is_training, project_shortcut=False)
             # flow = residual_block(flow, num_filters, (3, 3), 1, data_format, is_training, project_shortcut=False)
 
-        final = fc_as_conv(flow, flow.get_shape().as_list()[1:-1], cnn_dense_units)
-        final = tf.squeeze(final, axis=[1, 2])
+        if data_format == 'channels_first':
+            kernel = flow.get_shape().as_list()[2:4]
+            squeeze_axis = [2, 3]
+        else:  # channels_last
+            kernel = flow.get_shape().as_list()[1:-1]
+            squeeze_axis = [1, 2]
+
+        final = conv2d_wrapper(flow, cnn_dense_units, kernel, (1,1), data_format, 'valid', tf.nn.relu)
+        final = tf.squeeze(final, axis=squeeze_axis)
 
         return final
 
