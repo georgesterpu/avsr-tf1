@@ -35,6 +35,7 @@ class Seq2SeqUnimodalDecoder(object):
 
         self._labels = labels
         self._labels_len = labels_length
+
         self._hparams = hparams
 
         self._mode = mode
@@ -45,7 +46,7 @@ class Seq2SeqUnimodalDecoder(object):
         self._EOS_ID = reverse_dict['EOS']
         self._sampling_probability_outputs = tf.constant(hparams.sampling_probability_outputs,
                                                          dtype=self._hparams.dtype)
-        self._vocab_size = len(hparams.unit_dict) - 1  # excluding END
+        self._vocab_size = len(hparams.unit_dict) - 2  # num unique symbols we expect in the decoder's inputs
 
         self._global_step = tf.Variable(0, trainable=False, name='global_step')
 
@@ -63,6 +64,7 @@ class Seq2SeqUnimodalDecoder(object):
         We assume that the EOS id has already been written during dataset generation.
         """
         _GO_SLICE = tf.ones([self._batch_size, 1], dtype=tf.int32) * self._GO_ID
+
         self._labels_padded_GO = tf.concat([_GO_SLICE, self._labels], axis=1)
 
     def _init_embedding(self):
@@ -112,9 +114,9 @@ class Seq2SeqUnimodalDecoder(object):
                 self._init_optimiser()
             else:
                 if self._hparams.decoding_algorithm == 'greedy':
-                    self._build_decoder_greedy()
+                    self._build_decoder_test_greedy()
                 elif self._hparams.decoding_algorithm == 'beam_search':
-                    self._build_decoder_beam_search()
+                    self._build_decoder_test_beam_search()
                 else:
                     raise Exception('The only supported algorithms are `greedy` and `beam_search`')
 
@@ -191,11 +193,11 @@ class Seq2SeqUnimodalDecoder(object):
         Builds the decoder(s) used in training
         """
 
-        self._labels_embedded = tf.nn.embedding_lookup(self._embedding_matrix, self._labels_padded_GO)
+        self._decoder_train_inputs = tf.nn.embedding_lookup(self._embedding_matrix, self._labels_padded_GO)
 
         self._basic_decoder_train_outputs, self._final_states, self._final_seq_lens = self._basic_decoder_train()
 
-    def _build_decoder_greedy(self):
+    def _build_decoder_test_greedy(self):
         r"""
         Builds the greedy test decoder, which feeds the most likely decoded symbol as input for the
         next timestep
@@ -229,7 +231,7 @@ class Seq2SeqUnimodalDecoder(object):
         if self._hparams.write_attention_alignment is True:
             self.attention_summary = self._create_attention_alignments_summary(states, )
 
-    def _build_decoder_beam_search(self):
+    def _build_decoder_test_beam_search(self):
         r"""
         Builds a beam search test decoder
         """
@@ -250,7 +252,7 @@ class Seq2SeqUnimodalDecoder(object):
             initial_state=initial_state,
             beam_width=self._hparams.beam_width,
             output_layer=self._dense_layer,
-            length_penalty_weight=0.5,
+            length_penalty_weight=0.6,
         )
 
         outputs, states, lengths = seq2seq.dynamic_decode(
@@ -372,10 +374,6 @@ class Seq2SeqUnimodalDecoder(object):
             dtype=self._hparams.dtype
         )
 
-        if self._hparams.label_skipping is True and self._mode == 'train':
-            # diff = tf.shape(self._labels)[-1] - tf.shape(self._loss_weights)[-1]
-            self._labels = self._labels[:,:tf.shape(self._loss_weights)[-1]]
-
         self.batch_loss = seq2seq.sequence_loss(
             logits=self._basic_decoder_train_outputs.rnn_output,
             targets=self._labels,
@@ -445,7 +443,7 @@ class Seq2SeqUnimodalDecoder(object):
         """
 
         helper_train = seq2seq.ScheduledEmbeddingTrainingHelper(
-            inputs=self._labels_embedded,
+            inputs=self._decoder_train_inputs,
             sequence_length=self._labels_len,
             embedding=self._embedding_matrix,
             sampling_probability=self._sampling_probability_outputs,
@@ -472,41 +470,6 @@ class Seq2SeqUnimodalDecoder(object):
         )
 
         return outputs, fstate, fseqlen
-
-    def _beam_decoder_train(self):
-        r"""
-        Builds a beam search decoder to be used in training, along with the
-          Minimum Word Error Rate (MWER) training strategy.
-        """
-
-        if self._hparams.enable_attention is True:
-            cells, initial_state = self._add_attention(self._decoder_cells, beam_search=True)
-        else:
-            cells = self._decoder_cells
-            initial_state = self._decoder_initial_state
-
-        beam_decoder= seq2seq.BeamSearchDecoder(
-            cell=cells,
-            embedding=self._embedding_matrix,
-            start_tokens=array_ops.fill([self._batch_size], self._GO_ID),
-            end_token=self._EOS_ID,
-            initial_state=initial_state,
-            beam_width=self._hparams.beam_width,
-            output_layer=self._dense_layer,
-            length_penalty_weight=0.5,
-        )
-
-        output, fstate, fseqlen = seq2seq.dynamic_decode(
-            beam_decoder,
-            output_time_major=False,
-            impute_finished=False,
-            swap_memory=False
-        )
-
-        beam_scores = output.beam_search_decoder_output.scores
-        beam_ids = output.predicted_ids
-
-        return beam_ids, beam_scores
 
     def _add_attention(self, decoder_cells, beam_search=False):
         r"""
@@ -545,25 +508,6 @@ class Seq2SeqUnimodalDecoder(object):
         )
 
         return attention_cells, initial_state
-
-    def _compute_beam_wers(self, beam_ids, labels):
-        r"""
-        Code under testing, MWER
-        Args:
-            beam_ids:
-            labels:
-
-        Returns:
-
-        """
-        beam_chars = tf.nn.embedding_lookup(self._char_emb, beam_ids)
-        labels_chars = tf.nn.embedding_lookup(self._char_emb, labels)
-        beam_strings = tf.string_join(tf.split(beam_chars, beam_chars.shape[1], axis=1), '')
-        labels_strings = tf.string_join(tf.split(labels_chars, labels_chars.shape[1], axis=1), '')
-
-        beam_eds = tf.stack([tf.edit_distance(tf.string_split(c), tf.string_split(d)) for c, d in (tf.unstack(beam_strings), tf.unstack(labels_strings))])
-
-        return beam_eds
 
 
 def _project_lstm_state_tuple(state_tuple, num_units):
