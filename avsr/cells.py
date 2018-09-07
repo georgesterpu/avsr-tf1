@@ -13,8 +13,8 @@ def _build_single_cell(cell_type, num_units, use_dropout, mode, dropout_probabil
     """
     if cell_type == 'lstm':
         cells = LSTMCell(num_units=num_units,
-                         use_peepholes=True,
-                         cell_clip=None,
+                         use_peepholes=False,
+                         cell_clip=1.0,
                          initializer=tf.variance_scaling_initializer())
     elif cell_type == 'gru':
         cells = GRUCell(num_units=num_units,
