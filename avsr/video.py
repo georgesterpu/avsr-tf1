@@ -165,6 +165,7 @@ def resnet_cnn():
         flow = conv2d_wrapper(flow, cnn_filters[0], (3, 3), 1, data_format=data_format)
         flow = batch_norm_relu(flow, is_training, data_format)
 
+        flow = tf.identity(flow)  # ??
         flow = residual_block(flow, cnn_filters[0], (3, 3), 1, data_format, is_training, project_shortcut=False, skip_bn=True)
 
         for layer_id, num_filters in enumerate(cnn_filters[1:]):
@@ -182,6 +183,7 @@ def resnet_cnn():
         final = conv2d_wrapper(flow, cnn_dense_units, kernel, (1,1), data_format, 'valid', tf.nn.relu)
         final = tf.squeeze(final, axis=squeeze_axis)
 
+        final = tf.identity(final)  # ??
         return final
 
     return model

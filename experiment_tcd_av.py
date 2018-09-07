@@ -20,11 +20,13 @@ def main(argv):
         batch_normalisation=True,
         video_train_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords4/rgb36lips_train_sd.tfrecord',
         video_test_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords4/rgb36lips_test_sd.tfrecord',
-        audio_processing=None,
+        audio_processing='features',
+        audio_train_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords4/logmel_train_sd_stack_clean.tfrecord',
+        audio_test_record='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords4/logmel_test_sd_stack_clean.tfrecord',
         labels_train_record ='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords4/characters_train_sd.tfrecord',
         labels_test_record ='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords4/characters_test_sd.tfrecord',
         encoder_type='unidirectional',
-        architecture='unimodal',
+        architecture='av_align',
         clip_gradients=True,
         max_gradient_norm=1.0,
         recurrent_regularisation=0.0001,
@@ -52,7 +54,7 @@ def main(argv):
 
     experiment.train(
         num_epochs=num_epochs,
-        logfile='./logs/tcd_video_to_chars',
+        logfile='./logs/tcd_av_to_chars',
         try_restore_latest_checkpoint=True
     )
 
