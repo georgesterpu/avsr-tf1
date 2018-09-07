@@ -8,7 +8,6 @@ import time
 from os import makedirs, path
 from .utils import compute_wer, write_sequences_to_labelfile
 
-
 class Data(collections.namedtuple("Data", ("inputs", "inputs_length", "inputs_filenames",
                                            "labels", "labels_length", "labels_filenames",
                                            "iterator_initializer"))):
@@ -60,7 +59,8 @@ class AVSR(object):
                  max_gradient_norm=1.0,
                  num_gpus=1,
                  write_attention_alignment=False,
-                 dtype=tf.float32
+                 dtype=tf.float32,
+                 profiling=False,
                  ):
 
         self._unit = unit
@@ -114,6 +114,7 @@ class AVSR(object):
             num_gpus=num_gpus,
             write_attention_alignment=write_attention_alignment,
             dtype=dtype,
+            profiling=profiling
         )
 
         self._hparams_audio = tf.contrib.training.HParams(
@@ -180,8 +181,27 @@ class AVSR(object):
             try:
                 while True:
                     out = self._train_session.run([self._train_model.model.train_op,
-                                                   self._train_model.model.batch_loss,
-                                                   ], )
+                                                   self._train_model.model.batch_loss,],
+                                                  **self.sess_opts)
+
+                    if self._hparams.profiling is True:
+                        self.profiler.add_step(batches, self.run_meta)
+
+                        from tensorflow.python.profiler import option_builder
+
+                        self.profiler.profile_name_scope(options=(option_builder.ProfileOptionBuilder
+                                                                  .trainable_variables_parameter()))
+
+                        opts = option_builder.ProfileOptionBuilder.time_and_memory()
+                        self.profiler.profile_operations(options=opts)
+
+                        opts = (option_builder.ProfileOptionBuilder(
+                            option_builder.ProfileOptionBuilder.time_and_memory())
+                                .with_step(batches)
+                                .with_timeline_output('/tmp/timelines/').build())
+
+
+                        self.profiler.profile_graph(options=opts)
 
                     sum_loss += out[1]
                     print('batch: {}'.format(batches))
@@ -239,7 +259,7 @@ class AVSR(object):
                 out = self._evaluate_session.run(session_outputs)
 
                 # debug time
-                assert (any(list(out[2] == out[3])))
+                # assert (any(list(out[2] == out[3])))
                 # assert (any(list(out[1] == out[3])))
 
                 if self._write_attention_alignment is True:
@@ -298,6 +318,19 @@ class AVSR(object):
         self._train_session = tf.Session(graph=self._train_graph, config=config)
         self._evaluate_session = tf.Session(graph=self._evaluate_graph, config=config)
         self._predict_session = tf.Session(graph=self._predict_graph, config=config)
+
+        if self._hparams.profiling is True:
+            from tensorflow.profiler import Profiler
+            self.profiler = Profiler(self._train_session.graph)
+            self.run_meta = tf.RunMetadata()
+            makedirs('/tmp/timelines/', exist_ok=True)
+            self.sess_opts = {
+                'options' : tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE),
+                'run_metadata': self.run_meta
+            }
+        else:
+            self.sess_opts = {}
+
 
     def _initialize_sessions(self):
         self._train_session.run(self._train_model.initializer)
