@@ -8,13 +8,14 @@ import time
 from os import makedirs, path
 from .utils import compute_wer, write_sequences_to_labelfile
 
+
 class Data(collections.namedtuple("Data", ("inputs", "inputs_length", "inputs_filenames",
                                            "labels", "labels_length", "labels_filenames",
                                            "iterator_initializer"))):
     pass
 
 
-class Model(collections.namedtuple("Model",("data", "model", "initializer", "batch_size"))):
+class Model(collections.namedtuple("Model", ("data", "model", "initializer", "batch_size"))):
     pass
 
 
@@ -45,12 +46,11 @@ class AVSR(object):
                  decoder_units_per_layer=(128,),
                  mwer_training=False,
                  enable_attention=True,
-                 attention_type=(('scaled_luong',)*1, ('scaled_luong')*1),
+                 attention_type=(('scaled_luong',)*1, ('scaled_luong',)*1),
                  use_dropout=True,
                  dropout_probability=(0.9, 0.9, 0.9),
                  embedding_size=0,
                  sampling_probability_outputs=0.1,
-                 label_skipping=False,
                  decoding_algorithm='beam_search',
                  beam_width=4,
                  optimiser='Adam',
@@ -103,7 +103,6 @@ class AVSR(object):
             dropout_probability=dropout_probability,
             embedding_size=embedding_size,
             sampling_probability_outputs=sampling_probability_outputs,
-            label_skipping=label_skipping,
             decoding_algorithm=decoding_algorithm,
             beam_width=beam_width,
             use_ctc=False,
@@ -181,7 +180,7 @@ class AVSR(object):
             try:
                 while True:
                     out = self._train_session.run([self._train_model.model.train_op,
-                                                   self._train_model.model.batch_loss,],
+                                                   self._train_model.model.batch_loss, ],
                                                   **self.sess_opts)
 
                     if self._hparams.profiling is True:
@@ -200,7 +199,6 @@ class AVSR(object):
                                 .with_step(batches)
                                 .with_timeline_output('/tmp/timelines/').build())
 
-
                         self.profiler.profile_graph(options=opts)
 
                     sum_loss += out[1]
@@ -214,7 +212,7 @@ class AVSR(object):
             f.write('Average batch_loss as epoch {} is {}\n'.format(epoch, sum_loss / batches))
             f.flush()
 
-            if (epoch) % 5 == 0:
+            if epoch % 5 == 0:
                 save_path = self._train_model.model.saver.save(
                     sess=self._train_session,
                     save_path=checkpoint_path,
@@ -224,7 +222,8 @@ class AVSR(object):
                 error_rate = self.evaluate(save_path, epoch)
                 for (k, v) in error_rate.items():
                     f.write(k + ': {:.4f}% '.format(v * 100))
-                f.write('\n'); f.flush()
+                f.write('\n')
+                f.flush()
 
         f.close()
 
@@ -234,7 +233,7 @@ class AVSR(object):
             save_path=checkpoint_path
         )
         self._evaluate_session.run([stream.iterator_initializer for stream in self._evaluate_model.data
-                                     if stream is not None])
+                                    if stream is not None])
         predictions_dict = {}
         labels_dict = {}
 
@@ -294,7 +293,9 @@ class AVSR(object):
 
         outdir = path.join('predictions', path.split(path.split(checkpoint_path)[0])[-1])
         makedirs(outdir, exist_ok=True)
-        write_sequences_to_labelfile(predictions_dict, path.join(outdir, 'predicted_epoch_{}.mlf'.format(epoch)), labels_dict)
+        write_sequences_to_labelfile(predictions_dict,
+                                     path.join(outdir, 'predicted_epoch_{}.mlf'.format(epoch)),
+                                     labels_dict)
 
         return error_rate
 
@@ -325,12 +326,11 @@ class AVSR(object):
             self.run_meta = tf.RunMetadata()
             makedirs('/tmp/timelines/', exist_ok=True)
             self.sess_opts = {
-                'options' : tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE),
+                'options': tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE),
                 'run_metadata': self.run_meta
             }
         else:
             self.sess_opts = {}
-
 
     def _initialize_sessions(self):
         self._train_session.run(self._train_model.initializer)
@@ -453,6 +453,7 @@ class AVSR(object):
         if self._video_processing is not None:
 
             if 'cnn' in self._video_processing:
+
                 visual_features = cnn_layers(
                     inputs=video_data.inputs,
                     cnn_type=self._video_processing,
