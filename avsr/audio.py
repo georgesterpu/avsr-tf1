@@ -1,5 +1,6 @@
 import tensorflow as tf
 from tensorflow.contrib import signal
+import numpy as np
 
 
 def compute_stfts(tensors, hparams):
@@ -55,3 +56,20 @@ def process_audio(tensors, hparams):
     mfccs = compute_mfccs(log_mel_spectrograms, hparams)
 
     return mfccs
+
+
+def read_wav_file(file, sr=22050):
+    r"""
+    Loads wav files from disk and resamples to 22050 Hz
+    The output is shaped as [timesteps, 1]
+    Parameters
+    ----------
+    file
+
+    Returns
+    -------
+
+    """
+    import librosa
+    data, sr = librosa.load(file, sr)
+    return np.expand_dims(data, axis=-1)
