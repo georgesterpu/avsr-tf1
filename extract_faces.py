@@ -57,9 +57,7 @@ def process_one_batch(file_batch, openface_bin, label_map, out_dir):
 
 def chunks(l, n):
     # https://chrisalbon.com/python/data_wrangling/break_list_into_chunks_of_equal_size/
-    # For item i in a range that is a length of l,
     for i in range(0, len(l), n):
-        # Create an index range for l of n items:
         yield l[i:i+n]
 
 
