@@ -81,7 +81,7 @@ Attention-based Audio-Visual Fusion for Robust Automatic Speech Recognition.
 In 2018 International Conference on Multimodal Interaction (ICMI ’18), October 16–20, 2018, Boulder, CO, USA.
 ACM, New York, NY, USA, 5 pages. https://doi.org/10.1145/3242969.3243014
 
-[[pdf]](https://arxiv.org/abs/1809.01728) <details><summary>[bib]</summary> 
+<details><summary>[bib]</summary> 
 <p>
 
 ```
@@ -99,6 +99,7 @@ ACM, New York, NY, USA, 5 pages. https://doi.org/10.1145/3242969.3243014
 </p>
 </details>
 
+[[pdf]](https://arxiv.org/abs/1809.01728) 
 
 
 # How to contribute
@@ -106,15 +107,7 @@ ACM, New York, NY, USA, 5 pages. https://doi.org/10.1145/3242969.3243014
 We are delighted to receive your feedback and help on improving Sigmedia-AVSR. On the technical side, this could be
 an advice or a pull request for code refactoring (we are not Python/TensorFlow experts), adding implementations of a popular
 features, bug reports, performance improvements, language models, support for computation in 16 bit precision or on
-Google TPU devices.@inproceedings{sterpu_icmi,
-  author = {George Sterpu and Christian Saam and Naomi Harte},
-  title = {Attention-based Audio-Visual Fusion for Robust Automatic Speech Recognition},
-  year = {2018},
-  publisher = {{ACM, New York, NY, USA}},
-  booktitle = {2018 International Conference on Multimodal Interaction (ICMI '18), October 16--20, 2018, Boulder, CO, USA},
-  url       = {http://doi.acm.org/10.1145/3242969.3243014},
-  doi       = {10.1145/3242969.3243014},
-}
+Google TPU devices.
 
 # References
 
