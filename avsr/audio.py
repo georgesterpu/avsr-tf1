@@ -49,13 +49,17 @@ def compute_mfccs(log_mel_spectrograms, hparams):
     return mfccs
 
 
-def process_audio(tensors, hparams):
-    tensors = tf.squeeze(tensors, axis=-1)
+def process_audio(tensors, hparams, logmel_only=False):
     stfts = compute_stfts(tensors, hparams)
     log_mel_spectrograms = compute_log_mel_spectrograms(stfts, hparams)
-    mfccs = compute_mfccs(log_mel_spectrograms, hparams)
 
-    return mfccs
+    if logmel_only is False:
+        mfccs = compute_mfccs(log_mel_spectrograms, hparams)
+        feature = mfccs
+    else:
+        feature = log_mel_spectrograms
+
+    return feature
 
 
 def read_wav_file(file, sr=22050):

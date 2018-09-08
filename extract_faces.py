@@ -3,6 +3,7 @@ from os import path, makedirs
 import sys
 from multiprocessing import Pool
 from itertools import repeat
+from avsr.utils import get_files
 
 
 def main(argv):
@@ -59,14 +60,6 @@ def chunks(l, n):
     # https://chrisalbon.com/python/data_wrangling/break_list_into_chunks_of_equal_size/
     for i in range(0, len(l), n):
         yield l[i:i+n]
-
-
-def get_files(file_list, dataset_dir):
-    with open(file_list, 'r') as f:
-        contents = f.read().splitlines()
-
-    contents = [path.join(dataset_dir, line.split()[0]) for line in contents]
-    return contents
 
 
 if __name__ == '__main__':
