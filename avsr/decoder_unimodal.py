@@ -288,7 +288,8 @@ class Seq2SeqUnimodalDecoder(object):
                 num_units=num_units,
                 memory=memory,
                 memory_sequence_length=memory_sequence_length,
-                normalize=False
+                normalize=False,
+                dtype=self._hparams.dtype
             )
             self._output_attention = False
         elif attention_type == 'normed_bahdanau':
@@ -296,7 +297,8 @@ class Seq2SeqUnimodalDecoder(object):
                 num_units=num_units,
                 memory=memory,
                 memory_sequence_length=memory_sequence_length,
-                normalize=True
+                normalize=True,
+                dtype=self._hparams.dtype,
             )
             self._output_attention = False
         elif attention_type == 'normed_monotonic_bahdanau':
@@ -307,14 +309,16 @@ class Seq2SeqUnimodalDecoder(object):
                 normalize=True,
                 score_bias_init=-2.0,
                 sigmoid_noise=1.0 if self._mode == 'train' else 0.0,
-                mode='hard' if self._mode != 'train' else 'parallel'
+                mode='hard' if self._mode != 'train' else 'parallel',
+                dtype=self._hparams.dtype,
             )
             self._output_attention = False
         elif attention_type == 'luong':
             attention_mechanism = seq2seq.LuongAttention(
                 num_units=num_units,
                 memory=memory,
-                memory_sequence_length=memory_sequence_length
+                memory_sequence_length=memory_sequence_length,
+                dtype=self._hparams.dtype,
             )
             self._output_attention = True
         elif attention_type == 'scaled_luong':
@@ -323,6 +327,7 @@ class Seq2SeqUnimodalDecoder(object):
                 memory=memory,
                 memory_sequence_length=memory_sequence_length,
                 scale=True,
+                dtype=self._hparams.dtype,
             )
             self._output_attention = True
         elif attention_type == 'scaled_monotonic_luong':
@@ -333,7 +338,8 @@ class Seq2SeqUnimodalDecoder(object):
                 scale=True,
                 score_bias_init=-2.0,
                 sigmoid_noise=1.0 if self._mode == 'train' else 0.0,
-                mode='hard' if self._mode != 'train' else 'parallel'
+                mode='hard' if self._mode != 'train' else 'parallel',
+                dtype=self._hparams.dtype,
             )
             self._output_attention = True
         else:
@@ -457,6 +463,7 @@ class Seq2SeqUnimodalDecoder(object):
             output_time_major=False,
             impute_finished=True,
             swap_memory=False,
+
         )
 
         return outputs, fstate, fseqlen
