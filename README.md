@@ -1,6 +1,6 @@
 # Sigmedia-AVSR
 
-Audio-Visual Speech Recognition (AVSR) research system with sequence-to-sequence neural networks based on TensorFlow
+Audio-Visual Speech Recognition (AVSR) research system using sequence-to-sequence neural networks based on TensorFlow
 
 # About
 
@@ -8,13 +8,18 @@ Sigmedia-AVSR is an open-source research system for Speech Recognition, develope
 in Trinity College Dublin, Ireland.
 
 Written entirely in Python, Sigmedia-AVSR aims to provide a simple and reproducible way of training and evaluating
-speech recognition models based on sequence to sequence neural networks. 
+speech recognition models based on sequence to sequence neural networks. Sigmedia-AVSR can exploit both auditory
+and visual speech modalities, considered either independently (ASR, VSR) or together (AVSR).  
 
 Rather than providing a dense documentation to the users and contributors, the Sigmedia-AVSR code is designed
 (or strives) to be intuitive and self-explanatory, encouraging researchers and developers to understand the entire
 codebase and propose improvements at its lowest levels. Hence we want it be more of a flexible research system than
 a black box for production. For didactic purposes, please refer to Sigmedia-ASR, which is the single modality
 precursor written in a more compact form and no longer maintained.
+
+### Architecture
+
+
 
 # Core functionalities
 
@@ -31,7 +36,7 @@ precursor written in a more compact form and no longer maintained.
 * audio-only (LAS)
 * visual-only (lip-reading)
 * audio-visual fusion
-    * dual-attention decoder (WLAS)
+    * dual-attention decoder ([WLAS][4])
     * attention-based alignment (AV-Align)
 * flexible language units (phonemes, visemes, characters etc.)
  
@@ -40,9 +45,16 @@ precursor written in a more compact form and no longer maintained.
     * Character Error Rate
     * Word Error Rate
 
-# Examples
+# Getting started
+
+A typical workflow is the following:
+
+1. convert data into .tfrecord files
+2. train/evaluate models
 
 Please refer to the attached examples for running audio-only, visual-only, or audio-visual speech recognition experiments.
+
+To prepare the data, you can use the two scripts `extract_faces.py` and `write_records_tcd.py`
 
 # Dependencies
 
@@ -72,22 +84,22 @@ ACM, New York, NY, USA, 5 pages. https://doi.org/10.1145/3242969.3243014
 
 # References
 
-Sequence to Sequence Learning with Neural Networks
+[1]: Sequence to Sequence Learning with Neural Networks
 https://arxiv.org/abs/1409.3215
-
-Neural Machine Translation by Jointly Learning to Align and Translate
+    
+[2] Neural Machine Translation by Jointly Learning to Align and Translate
 https://arxiv.org/abs/1409.0473
 
-State-of-the-art Speech Recognition With Sequence-to-Sequence Models
+[3] State-of-the-art Speech Recognition With Sequence-to-Sequence Models
 https://arxiv.org/abs/1712.01769
 
-Lip Reading Sentences in the Wild
+[4] Lip Reading Sentences in the Wild
 https://arxiv.org/abs/1611.05358
 
-Can DNNs Learn to Lipread Full Sentences?
+[5] Can DNNs Learn to Lipread Full Sentences?
 https://arxiv.org/abs/1805.11685
 
-Attention-based Audio-Visual Fusion for Robust Automatic Speech Recognition
+[6] Attention-based Audio-Visual Fusion for Robust Automatic Speech Recognition
 https://arxiv.org/abs/1809.01728
 
 # Contact
