@@ -384,7 +384,7 @@ class Seq2SeqUnimodalDecoder(object):
         reg_loss = 0
 
         if self._hparams.recurrent_regularisation is not None:
-            regularisable_vars = self._get_trainable_vars(self._hparams.cell_type)
+            regularisable_vars = _get_trainable_vars(self._hparams.cell_type)
             reg = tf.contrib.layers.l2_regularizer(scale=self._hparams.recurrent_regularisation)
             reg_loss = tf.contrib.layers.apply_regularization(reg, regularisable_vars)
 
@@ -426,16 +426,6 @@ class Seq2SeqUnimodalDecoder(object):
         else:
             self.train_op = optimiser.apply_gradients(
                 zip(gradients, variables))
-
-    def _get_trainable_vars(self, cell_type):
-        r"""
-        Returns the list of trainable variables associated with the recurrent layers
-        """
-
-        cell_type = cell_type.split('_')[0]
-        vars = [var for var in tf.trainable_variables() if cell_type + '_' in var.name
-                and not 'bias' in var.name]
-        return vars
 
     def _basic_decoder_train(self):
         r"""
@@ -510,6 +500,16 @@ class Seq2SeqUnimodalDecoder(object):
         return attention_cells, initial_state
 
 
+def _get_trainable_vars(cell_type):
+    r"""
+    Returns the list of trainable variables associated with the recurrent layers
+    """
+    cell_type = cell_type.split('_')[0]
+    vars_ = [var for var in tf.trainable_variables() if cell_type + '_' in var.name
+             and 'bias' not in var.name]
+    return vars_
+
+
 def _project_lstm_state_tuple(state_tuple, num_units):
     r"""
     Concatenates all the `c` and `h` members from a list of `LSTMStateTuple`
@@ -521,10 +521,7 @@ def _project_lstm_state_tuple(state_tuple, num_units):
     Returns:
         projected_state: a single `LSTMStateTuple` with `c` and `h` of dimension `num_units`
     """
-    state_proj_layer = Dense(num_units,
-                            name='state_projection',
-                            use_bias=False,
-                            )
+    state_proj_layer = Dense(num_units, name='state_projection', use_bias=False)
 
     cat_c = tf.concat([state.c for state in state_tuple], axis=-1)
     cat_h = tf.concat([state.h for state in state_tuple], axis=-1)

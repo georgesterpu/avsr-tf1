@@ -42,9 +42,7 @@ class Seq2SeqBimodalDecoder(object):
 
         # create model
         self._infer_num_valid_streams()
-        if self._hparams.label_skipping is True and mode == 'train':
-            # self._labels_len2 = self._labels_len
-            self._labels, self._labels_len = self._label_skipping()
+
         self._add_special_symbols()
         self._init_embedding()
         self._construct_decoder_initial_state()
@@ -62,32 +60,6 @@ class Seq2SeqBimodalDecoder(object):
             raise Exception('We are totally blind and deaf here...')
 
         self._num_streams = num_streams
-
-    def _label_skipping(self):
-
-        bs, ts = tf.unstack(tf.shape(self._labels))
-
-        def expand_fnc(x):
-            import numpy as np
-            lst = np.array((), dtype=np.int32)
-            for idx in np.arange(np.size(x)):
-                r = np.arange(x[idx], dtype=np.int32)
-                lst = np.append(lst, r)
-            return lst
-
-        bool_table = tf.not_equal(self._labels, self._global_step % 11 + 1)
-        good_indices = tf.cast(tf.where(bool_table), dtype=tf.int32)
-        good_values = tf.gather_nd(self._labels, good_indices)
-        y1, y2, cnt = tf.unique_with_counts(good_indices[:, 0])
-
-        newidx = tf.py_func(expand_fnc, [cnt], tf.int32)
-        pair = tf.stack((good_indices[:, 0], newidx), axis=1)
-
-        added_elems = ts - cnt
-        new_labels = tf.scatter_nd(pair, good_values, tf.shape(self._labels))
-        new_labels_lens = self._labels_len - added_elems
-
-        return new_labels, new_labels_lens
 
     def _add_special_symbols(self):
         batch_size, sequence_len = tf.unstack(tf.shape(self._labels))
@@ -155,14 +127,16 @@ class Seq2SeqBimodalDecoder(object):
             zero_slice = [tf.zeros(shape=tf.shape(self._audio_output.final_state[0].c), dtype=self._hparams.dtype)
                           for _ in range(len(self._audio_output.final_state[0]))]
 
-            video_state = tuple([LSTMStateTuple(c=zero_slice[0], h=zero_slice[1]) for _ in range(len(self._hparams.encoder_units_per_layer))])
+            video_state = tuple([LSTMStateTuple(c=zero_slice[0], h=zero_slice[1])
+                                 for _ in range(len(self._hparams.encoder_units_per_layer))])
 
         if self._audio_output is not None:
             audio_state = self._audio_output.final_state
         else:
             zero_slice = [tf.zeros(shape=tf.shape(self._video_output.final_state[0].c), dtype=self._hparams.dtype)
-                           for _ in range(len(self._video_output.final_state[0])) ]
-            audio_state = tuple([LSTMStateTuple(c=zero_slice[0], h=zero_slice[1]) for _ in range(len(self._hparams.encoder_units_per_layer))])
+                          for _ in range(len(self._video_output.final_state[0]))]
+            audio_state = tuple([LSTMStateTuple(c=zero_slice[0], h=zero_slice[1])
+                                 for _ in range(len(self._hparams.encoder_units_per_layer))])
 
         state_tuples = []
 
@@ -181,12 +155,12 @@ class Seq2SeqBimodalDecoder(object):
             state_tuples = state_tuples[0]
 
         if len(self._hparams.decoder_units_per_layer) != len(self._hparams.encoder_units_per_layer):
-            ## option 1
+            # option 1
             # self._decoder_initial_state = state_tuples[-1]
             # make sure that encoder_units[-1] == decoder_units[0]
             # to make the N layer encoder -> 1 layer decoder arch work
 
-            ## option 2
+            # option 2
 
             self._decoder_initial_state = _project_lstm_state_tuple(
                 state_tuples, num_units=self._hparams.decoder_units_per_layer[0])
@@ -214,7 +188,7 @@ class Seq2SeqBimodalDecoder(object):
         if self._video_memory is not None:
 
             if beam_search is True:
-                ## TODO potentially broken, please re-check
+                #  TODO potentially broken, please re-check
                 self._video_memory = seq2seq.tile_batch(
                     self._video_memory, multiplier=self._hparams.beam_width)
 
@@ -235,7 +209,7 @@ class Seq2SeqBimodalDecoder(object):
         if self._audio_memory is not None:
 
             if beam_search is True:
-                ## TODO potentially broken, please re-check
+                #  TODO potentially broken, please re-check
                 self._audio_memory = seq2seq.tile_batch(
                     self._audio_memory, multiplier=self._hparams.beam_width)
 
@@ -489,22 +463,12 @@ class Seq2SeqBimodalDecoder(object):
             Computes the batch_loss function to be minimised
             :return:
             """
-        # emb = tf.constant([0.0, 3.17, 0.64, 1.70, 14.28, 3.44, 8.33, 5.52, 2.29, 0.31, 0.47, 2.06, 1.40, 14.28, 14.28])
-        # def elem_iter(y): return tf.nn.embedding_lookup(emb, y)
-        # def row_iter(x): return elem_iter(x)
-        # self._loss_weights2 = tf.map_fn(row_iter, self._labels, dtype=tf.float32)
 
         self._loss_weights = tf.sequence_mask(
             lengths=self._labels_len,
             dtype=self._hparams.dtype
         )
-        # self._loss_weights = tf.multiply(self._loss_weights, self._loss_weights2)
 
-        if self._hparams.label_skipping is True and self._mode == 'train':
-            # diff = tf.shape(self._labels)[-1] - tf.shape(self._loss_weights)[-1]
-            self._labels = self._labels[:,:tf.shape(self._loss_weights)[-1]]
-
-        # self._labels = tf.Print(self._labels, [diff], summarize=1000)
         self.batch_loss = seq2seq.sequence_loss(
             logits=self._decoder_train_outputs.rnn_output,
             targets=self._labels,
@@ -513,34 +477,17 @@ class Seq2SeqBimodalDecoder(object):
         reg_loss = 0
 
         if self._hparams.recurrent_regularisation is not None:
-            regularisable_vars = self._get_trainable_vars(self._hparams.cell_type)
+            regularisable_vars = _get_trainable_vars(self._hparams.cell_type)
             reg = tf.contrib.layers.l2_regularizer(scale=self._hparams.recurrent_regularisation)
             reg_loss = tf.contrib.layers.apply_regularization(reg, regularisable_vars)
 
-        # if 'cnn' in self._hparams.video_processing:
         if self._hparams.video_processing is not None:
             if 'cnn' in self._hparams.video_processing:
-                # !!we regularise the cnn vars by specifying a regulariser in conv2d!!
+                #  we regularise the cnn vars by passing a regulariser in conv2d
                 reg_variables = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
                 reg_loss += tf.reduce_sum(reg_variables)
 
         self.batch_loss = self.batch_loss + reg_loss
-
-        if self._hparams.use_ctc is True:
-            projected_encoder_outputs = self._dense_layer.apply(self._encoder_outputs)
-            # self.labels_sparse = ctc_label_dense_to_sparse(self._labels, self._labels_len)
-            idx = tf.where(tf.not_equal(self._labels, 0))
-            self.labels_sparse = tf.SparseTensor(idx, tf.gather_nd(self._labels, idx),
-                                                 tf.shape(self._labels, out_type=tf.int64))
-
-            ctc_loss = tf.reduce_mean(tf.nn.ctc_loss(
-                labels=self.labels_sparse,
-                inputs=projected_encoder_outputs,
-                sequence_length=self._inputs_len,
-                time_major=False,
-            ))
-
-            self.batch_loss = 0.8 * self.batch_loss + 0.2 * ctc_loss
 
         if self._hparams.optimiser == 'Adam':
             optimiser = tf.train.AdamOptimizer(learning_rate=self._hparams.learning_rate, epsilon=1e-8)
@@ -574,18 +521,16 @@ class Seq2SeqBimodalDecoder(object):
                 zip(gradients, variables))
 
 
-    def _get_trainable_vars(self, cell_type):
-        cell_type = cell_type.split('_')[0]
-        vars = [var for var in tf.trainable_variables() if cell_type + '_' in var.name
-                and not 'bias' in var.name]
-        return vars
+def _get_trainable_vars(cell_type):
+    cell_type = cell_type.split('_')[0]
+    vars_ = [var for var in tf.trainable_variables() if cell_type + '_' in var.name
+             and 'bias' not in var.name]
+    return vars_
+
 
 def _project_lstm_state_tuple(state_tuple, num_units):
 
-    state_proj_layer = Dense(num_units,
-                            name='state_projection',
-                            use_bias=False,
-                            )
+    state_proj_layer = Dense(num_units, name='state_projection', use_bias=False)
 
     cat_c = tf.concat([state.c for state in state_tuple], axis=-1)
     cat_h = tf.concat([state.h for state in state_tuple], axis=-1)
