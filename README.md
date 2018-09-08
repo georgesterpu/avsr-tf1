@@ -46,7 +46,10 @@ Please refer to the attached examples for running audio-only, visual-only, or au
 
 # Dependencies
 
-For visual/audio-visual experiments, please install [OpenFace](https://github.com/TadasBaltrusaitis/OpenFace)
+For visual/audio-visual experiments, please compile from source install [OpenFace](https://github.com/TadasBaltrusaitis/OpenFace)
+
+The other dependencies are popular and easy to install Python packages, so feel free to use your preferred sources.
+Unless otherwise stated, all dependencies should be kept updated to their latest stable versions to avoid compatibility issues.
 
 
 # Acknowledgements
