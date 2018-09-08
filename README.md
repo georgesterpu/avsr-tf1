@@ -17,9 +17,6 @@ codebase and propose improvements at its lowest levels. Hence we want it be more
 a black box for production. For didactic purposes, please refer to Sigmedia-ASR, which is the single modality
 precursor written in a more compact form and no longer maintained.
 
-### Architecture
-
-
 
 # Core functionalities
 
@@ -33,11 +30,11 @@ precursor written in a more compact form and no longer maintained.
 * write into TensorFlow-compatible format (TFRecord dataset)
 
 #### 3. Train sequence to sequence neural networks for continuous speech recognition
-* audio-only (LAS)
-* visual-only (lip-reading)
+* audio-only (LAS [3])
+* visual-only (lip-reading [5])
 * audio-visual fusion
-    * dual-attention decoder ([WLAS][4])
-    * attention-based alignment (AV-Align)
+    * dual-attention decoder (WLAS [4])
+    * attention-based alignment (AV-Align [6])
 * flexible language units (phonemes, visemes, characters etc.)
  
 #### 4. Evaluate models
@@ -47,7 +44,7 @@ precursor written in a more compact form and no longer maintained.
 
 # Getting started
 
-A typical workflow is the following:
+A typical workflow is as follows:
 
 1. convert data into .tfrecord files
 2. train/evaluate models
@@ -55,6 +52,8 @@ A typical workflow is the following:
 Please refer to the attached examples for running audio-only, visual-only, or audio-visual speech recognition experiments.
 
 To prepare the data, you can use the two scripts `extract_faces.py` and `write_records_tcd.py`
+
+For faster prototyping, we recommend checking out our publicly available audio-visual dataset, [TCD-TIMIT](https://sigmedia.tcd.ie/TCDTIMIT/)
 
 # Dependencies
 
@@ -90,8 +89,8 @@ https://arxiv.org/abs/1409.3215
 [2] Neural Machine Translation by Jointly Learning to Align and Translate
 https://arxiv.org/abs/1409.0473
 
-[3] State-of-the-art Speech Recognition With Sequence-to-Sequence Models
-https://arxiv.org/abs/1712.01769
+[3] Listen, Attend and Spell
+https://arxiv.org/abs/1508.01211
 
 [4] Lip Reading Sentences in the Wild
 https://arxiv.org/abs/1611.05358
