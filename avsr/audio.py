@@ -68,7 +68,8 @@ def read_wav_file(file, sr=22050):
     The output is shaped as [timesteps, 1]
     Parameters
     ----------
-    file
+    file:
+    sr: desired sampling rate
 
     Returns
     -------

@@ -76,7 +76,7 @@ class TFRecordWriter(object):
             writers = []
             for snr in snr_list:
                 if snr == 'clean':
-                    record_name = path.join(record  + '_' + str(snr) + '.tfrecord', )
+                    record_name = path.join(record + '_' + str(snr) + '.tfrecord', )
                 else:
                     record_name = path.join(record + '_' + noise_type + '_' + str(snr) + 'db.tfrecord', )
                 writers.append(tf.python_io.TFRecordWriter(record_name))
@@ -89,7 +89,7 @@ class TFRecordWriter(object):
 
                 for snr_idx, snr in enumerate(snr_list):
 
-                    data = np.copy(input_data)  ## safety first ? we don't have const in Python
+                    data = np.copy(input_data)  # safety first ? we don't have const in Python
 
                     if snr is not 'clean':
                         data = add_noise_cached(  # this is the function we don't trust
@@ -171,7 +171,7 @@ def _create_labels_dict(file):
     with open(file, 'r') as f:
         contents = f.read().splitlines()
 
-    labels_dict = dict([line.split(' ', 1) for line in contents])
+    labels_dict = dict([line.split(' ', maxsplit=1) for line in contents])
 
     return labels_dict
 
@@ -201,14 +201,14 @@ def _symbols_to_ints(symbols, unit_dict):
     return np.asarray(ints, dtype=np.int32)
 
 
-def _make_label_example(id, labels, unit):
+def _make_label_example(label_id, labels, unit):
 
     labels_len = len(labels)
 
     context = tf.train.Features(feature={
         "unit": _bytes_feature(bytes(unit, encoding='utf-8')),
         "labels_length": _int64_feature(labels_len),
-        "filename": _bytes_feature(bytes(id, encoding='utf-8'))
+        "filename": _bytes_feature(bytes(label_id, encoding='utf-8'))
     })
 
     label_features = [
@@ -223,7 +223,6 @@ def _make_label_example(id, labels, unit):
 
     return tf.train.SequenceExample(feature_lists=feature_lists,
                                     context=context)
-
 
 
 def _int64_feature(value):
@@ -335,6 +334,7 @@ def _build_audio_engine(target_sr, transformation):
 
     return engine(sess=sess, input_tensor=input_tensor, output_tensor=features)
 
+
 def make_input_example(file, data, content_type):
     if content_type == 'feature':
         example = make_feature_example(file, data)
@@ -344,6 +344,7 @@ def make_input_example(file, data, content_type):
         raise Exception('unknown content type')
 
     return example
+
 
 def make_feature_example(sentence_id, inputs):
 
@@ -431,4 +432,4 @@ def read_bmp_dir(feature_dir, output_resolution, crop_lips=False):
 
 def _stack_features(mat, window_len, stride):
     nrows = ((mat.shape[0]-window_len)//stride)+1
-    return mat[stride*np.arange(nrows)[:,None] + np.arange(window_len)].reshape([nrows, -1])
+    return mat[stride*np.arange(nrows)[:, None] + np.arange(window_len)].reshape([nrows, -1])
