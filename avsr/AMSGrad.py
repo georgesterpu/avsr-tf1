@@ -1,4 +1,6 @@
+# https://github.com/taki0112/AMSGrad-Tensorflow
 """AMSGrad for TensorFlow."""
+
 
 from tensorflow.python.eager import context
 from tensorflow.python.framework import ops
