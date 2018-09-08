@@ -13,7 +13,7 @@ def main(argv):
     num_threads = int(argv[1]) if len(argv) > 1 else 1
 
     openface_bin = '/run/media/john_tukey/download/software/OpenFace/build/bin/FeatureExtraction'
-    out_dir = '/run/media/john_tukey/download/datasets/tcdtimit/aligned_openface_204/'
+    out_dir = '/run/media/john_tukey/download/datasets/tcdtimit/aligned_openface/'
     makedirs(out_dir, exist_ok=True)
 
     dataset_dir = '/run/media/john_tukey/download/datasets/adapt/work/tcdtimit/'
