@@ -81,11 +81,11 @@ Attention-based Audio-Visual Fusion for Robust Automatic Speech Recognition.
 In 2018 International Conference on Multimodal Interaction (ICMI ’18), October 16–20, 2018, Boulder, CO, USA.
 ACM, New York, NY, USA, 5 pages. https://doi.org/10.1145/3242969.3243014
 
-<details><summary>[bib]</summary>
+[[pdf]](https://arxiv.org/abs/1809.01728) <details><summary>[bib]</summary> 
 <p>
 
 ```
-@inproceedings{sterpu_icmi,
+@inproceedings{sterpu_icmi18,
   author = {George Sterpu and Christian Saam and Naomi Harte},
   title = {Attention-based Audio-Visual Fusion for Robust Automatic Speech Recognition},
   year = {2018},
@@ -98,6 +98,8 @@ ACM, New York, NY, USA, 5 pages. https://doi.org/10.1145/3242969.3243014
 
 </p>
 </details>
+
+
 
 # How to contribute
 
