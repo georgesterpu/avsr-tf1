@@ -9,7 +9,7 @@ in Trinity College Dublin, Ireland.
 
 Written entirely in Python, Sigmedia-AVSR aims to provide a simple and reproducible way of training and evaluating
 speech recognition models based on sequence to sequence neural networks. Sigmedia-AVSR can exploit both auditory
-and visual speech modalities, considered either independently (ASR, VSR) or together (AVSR).  
+and visual speech modalities, considered either independently (ASR, VSR) or together (AVSR).
 
 Rather than providing a dense documentation to the users and contributors, the Sigmedia-AVSR code is designed
 (or strives) to be intuitive and self-explanatory, encouraging researchers and developers to understand the entire
@@ -62,13 +62,15 @@ For visual/audio-visual experiments, please compile from source install [OpenFac
 The other dependencies are popular and easy to install Python packages, so feel free to use your preferred sources.
 Unless otherwise stated, all dependencies should be kept updated to their latest stable versions to avoid compatibility issues.
 
-
 # Acknowledgements
 
 We are grateful to Eugene Brevdo of Google for his remarkable help and advice during the early stages of Sigmedia-ASR 
 (precursor of Sigmedia-AVSR) development. In addition, we would like to thank 
 Derek Murray, Andreas Steiner, Khe Chai Sim for the assistance and interesting conversations, and also every
 TensorFlow contributor on GitHub and StackOverflow.
+
+George wishes to thank Naomi Harte for her unmatched guidance as a PhD advisor, and also Christian Saam for his great
+dedication and time spent discussing ideas for sequence to sequence networks.
 
 # How to cite
 
@@ -79,7 +81,38 @@ Attention-based Audio-Visual Fusion for Robust Automatic Speech Recognition.
 In 2018 International Conference on Multimodal Interaction (ICMI ’18), October 16–20, 2018, Boulder, CO, USA.
 ACM, New York, NY, USA, 5 pages. https://doi.org/10.1145/3242969.3243014
 
-[bib tba, arxiv avail]
+<details><summary>[bib]</summary>
+<p>
+
+```
+@inproceedings{sterpu_icmi,
+  author = {George Sterpu and Christian Saam and Naomi Harte},
+  title = {Attention-based Audio-Visual Fusion for Robust Automatic Speech Recognition},
+  year = {2018},
+  publisher = {{ACM, New York, NY, USA}},
+  booktitle = {2018 International Conference on Multimodal Interaction (ICMI '18), October 16--20, 2018, Boulder, CO, USA},
+  url       = {http://doi.acm.org/10.1145/3242969.3243014},
+  doi       = {10.1145/3242969.3243014},
+}
+```
+
+</p>
+</details>
+
+# How to contribute
+
+We are delighted to receive your feedback and help on improving Sigmedia-AVSR. On the technical side, this could be
+an advice or a pull request for code refactoring (we are not Python/TensorFlow experts), adding implementations of a popular
+features, bug reports, performance improvements, language models, support for computation in 16 bit precision or on
+Google TPU devices.@inproceedings{sterpu_icmi,
+  author = {George Sterpu and Christian Saam and Naomi Harte},
+  title = {Attention-based Audio-Visual Fusion for Robust Automatic Speech Recognition},
+  year = {2018},
+  publisher = {{ACM, New York, NY, USA}},
+  booktitle = {2018 International Conference on Multimodal Interaction (ICMI '18), October 16--20, 2018, Boulder, CO, USA},
+  url       = {http://doi.acm.org/10.1145/3242969.3243014},
+  doi       = {10.1145/3242969.3243014},
+}
 
 # References
 
