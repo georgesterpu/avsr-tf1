@@ -62,7 +62,9 @@ class Seq2SeqEncoder(object):
                     mode=self._mode,
                     residual_connections=self._hparams.residual_encoder,
                     highway_connections=self._hparams.highway_encoder,
-                    base_gpu=self._gpu_id)
+                    base_gpu=self._gpu_id,
+                    dtype=self._hparams.dtype,
+                )
 
                 self._encoder_outputs, self._encoder_final_state = tf.nn.dynamic_rnn(
                     cell=self._encoder_cells,
@@ -82,7 +84,8 @@ class Seq2SeqEncoder(object):
                     use_dropout=self._hparams.use_dropout,
                     dropout_probability=self._hparams.dropout_probability,
                     mode=self._mode,
-                    base_gpu=self._gpu_id
+                    base_gpu=self._gpu_id,
+                    dtype=self._hparams.dtype,
                 )
 
                 self._bw_cells = build_rnn_layers(
@@ -91,7 +94,8 @@ class Seq2SeqEncoder(object):
                     use_dropout=self._hparams.use_dropout,
                     dropout_probability=self._hparams.dropout_probability,
                     mode=self._mode,
-                    base_gpu=self._gpu_id
+                    base_gpu=self._gpu_id,
+                    dtype=self._hparams.dtype,
                 )
 
                 bi_outputs, bi_state = tf.nn.bidirectional_dynamic_rnn(
@@ -175,6 +179,9 @@ class AttentiveEncoder(Seq2SeqEncoder):
                  gpu_id,
                  attended_memory,
                  attended_memory_length):
+        r"""
+        Implements https://arxiv.org/abs/1809.01728
+        """
 
         self._attended_memory = attended_memory
         self._attended_memory_length = attended_memory_length
@@ -198,7 +205,8 @@ class AttentiveEncoder(Seq2SeqEncoder):
                     dropout_probability=self._hparams.dropout_probability,
                     mode=self._mode,
                     base_gpu=self._gpu_id,
-                    as_list=True)
+                    as_list=True,
+                    dtype=self._hparams.dtype)
 
                 attention_mechanism, output_attention = create_attention_mechanism(
                     attention_type=self._hparams.attention_type[0][0],
@@ -206,6 +214,7 @@ class AttentiveEncoder(Seq2SeqEncoder):
                     memory=self._attended_memory,
                     memory_sequence_length=self._attended_memory_length,
                     mode=self._mode,
+                    dtype=self._hparams.dtype
                 )
 
                 attention_cells = seq2seq.AttentionWrapper(

@@ -5,7 +5,7 @@ import tensorflow as tf
 from tensorflow.contrib import seq2seq
 
 
-def _build_single_cell(cell_type, num_units, use_dropout, mode, dropout_probability, device=None):
+def _build_single_cell(cell_type, num_units, use_dropout, mode, dropout_probability, dtype, device=None):
     r"""
 
     :param num_units: `int`
@@ -15,11 +15,13 @@ def _build_single_cell(cell_type, num_units, use_dropout, mode, dropout_probabil
         cells = LSTMCell(num_units=num_units,
                          use_peepholes=False,
                          cell_clip=1.0,
-                         initializer=tf.variance_scaling_initializer())
+                         initializer=tf.variance_scaling_initializer(),
+                         dtype=dtype)
     elif cell_type == 'gru':
         cells = GRUCell(num_units=num_units,
                         kernel_initializer=tf.variance_scaling_initializer(),
                         bias_initializer=tf.variance_scaling_initializer(),
+                        dtype=dtype
                         )
     elif cell_type == 'ugrnn':
         cells = UGRNNCell(num_units)
@@ -59,6 +61,7 @@ def build_rnn_layers(
         dropout_probability,
         mode,
         base_gpu,
+        dtype,
         residual_connections=False,
         highway_connections=False,
         as_list=False
@@ -77,6 +80,7 @@ def build_rnn_layers(
             use_dropout=use_dropout,
             dropout_probability=dropout_probability,
             mode=mode,
+            dtype=dtype,
             device=device)
 
         if highway_connections is True and layer > 0:
@@ -100,14 +104,16 @@ def create_attention_mechanism(
         num_units,
         memory,
         memory_sequence_length,
-        mode):
+        mode,
+        dtype):
 
     if attention_type == 'bahdanau':
         attention_mechanism = seq2seq.BahdanauAttention(
             num_units=num_units,
             memory=memory,
             memory_sequence_length=memory_sequence_length,
-            normalize=False
+            normalize=False,
+            dtype=dtype,
         )
         output_attention = False
     elif attention_type == 'normed_bahdanau':
@@ -115,7 +121,8 @@ def create_attention_mechanism(
             num_units=num_units,
             memory=memory,
             memory_sequence_length=memory_sequence_length,
-            normalize=True
+            normalize=True,
+            dtype=dtype,
         )
         output_attention = False
     elif attention_type == 'normed_monotonic_bahdanau':
@@ -126,14 +133,16 @@ def create_attention_mechanism(
             normalize=True,
             score_bias_init=-2.0,
             sigmoid_noise=1.0 if mode == 'train' else 0.0,
-            mode='hard' if mode != 'train' else 'parallel'
+            mode='hard' if mode != 'train' else 'parallel',
+            dtype=dtype,
         )
         output_attention = False
     elif attention_type == 'luong':
         attention_mechanism = seq2seq.LuongAttention(
             num_units=num_units,
             memory=memory,
-            memory_sequence_length=memory_sequence_length
+            memory_sequence_length=memory_sequence_length,
+            dtype=dtype,
         )
         output_attention = True
     elif attention_type == 'scaled_luong':
@@ -142,6 +151,7 @@ def create_attention_mechanism(
             memory=memory,
             memory_sequence_length=memory_sequence_length,
             scale=True,
+            dtype=dtype,
         )
         output_attention = True
     elif attention_type == 'scaled_monotonic_luong':
@@ -152,7 +162,8 @@ def create_attention_mechanism(
             scale=True,
             score_bias_init=-2.0,
             sigmoid_noise=1.0 if mode == 'train' else 0.0,
-            mode='hard' if mode != 'train' else 'parallel'
+            mode='hard' if mode != 'train' else 'parallel',
+            dtype=dtype,
         )
         output_attention = True
     else:
