@@ -59,7 +59,7 @@ class AVSR(object):
                  max_gradient_norm=1.0,
                  num_gpus=1,
                  write_attention_alignment=False,
-                 dtype=tf.float32,
+                 precision='float16',
                  profiling=False,
                  ):
 
@@ -112,7 +112,7 @@ class AVSR(object):
             max_gradient_norm=max_gradient_norm,
             num_gpus=num_gpus,
             write_attention_alignment=write_attention_alignment,
-            dtype=dtype,
+            dtype=tf.float16 if precision=='float16' else tf.float32,
             profiling=profiling
         )
 

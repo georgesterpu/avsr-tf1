@@ -3,6 +3,7 @@ from tensorflow.contrib import seq2seq
 from .cells import build_rnn_layers
 from tensorflow.python.layers.core import Dense
 from tensorflow.python.ops import array_ops
+import numpy as np
 
 
 class Seq2SeqUnimodalDecoder(object):
@@ -77,13 +78,20 @@ class Seq2SeqUnimodalDecoder(object):
         else:
             with tf.variable_scope("embeddings"):
 
-                sqrt3 = tf.sqrt(3.0)
-                initialiser = tf.random_uniform_initializer(-sqrt3 / self._vocab_size, sqrt3 / self._vocab_size)
+                dtype = np.float16 if self._hparams.dtype.name=='float16' else np.float32
+                absval = np.divide(np.sqrt(3.0), self._vocab_size, dtype=dtype)
+
+                initialiser = tf.random_uniform_initializer(
+                    minval=absval,
+                    maxval=-absval,
+                    dtype=self._hparams.dtype)
 
                 self._embedding_matrix = tf.get_variable(
                     name="embedding_matrix",
                     shape=[self._vocab_size, self._hparams.embedding_size],
-                    initializer=initialiser
+                    initializer=initialiser,
+                    dtype=self._hparams.dtype,
+                    trainable=True
                 )
 
     def _init_decoder(self):
