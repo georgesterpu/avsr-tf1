@@ -67,7 +67,8 @@ Unless otherwise stated, all dependencies should be kept updated to their latest
 We are grateful to Eugene Brevdo of Google for his remarkable help and advice during the early stages of Sigmedia-ASR 
 (precursor of Sigmedia-AVSR) development. In addition, we would like to thank 
 Derek Murray, Andreas Steiner, Khe Chai Sim for the assistance and interesting conversations, and also every
-TensorFlow contributor on GitHub and StackOverflow.
+TensorFlow contributor on GitHub and StackOverflow. 
+Our work is supported by NVIDIA, which granted us a Titan Xp GPU through its academic program.
 
 George wishes to thank Naomi Harte for her unmatched guidance as a PhD advisor, and also Christian Saam for his great
 dedication and time spent discussing ideas for sequence to sequence networks.
