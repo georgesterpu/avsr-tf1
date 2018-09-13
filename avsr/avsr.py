@@ -49,7 +49,7 @@ class AVSR(object):
                  attention_type=(('scaled_luong',)*1, ('scaled_luong',)*1),
                  use_dropout=True,
                  dropout_probability=(0.9, 0.9, 0.9),
-                 embedding_size=0,
+                 embedding_size=128,
                  sampling_probability_outputs=0.1,
                  decoding_algorithm='beam_search',
                  beam_width=4,
@@ -59,7 +59,7 @@ class AVSR(object):
                  max_gradient_norm=1.0,
                  num_gpus=1,
                  write_attention_alignment=False,
-                 precision='float16',
+                 precision='float32',
                  profiling=False,
                  ):
 

@@ -106,7 +106,7 @@ ACM, New York, NY, USA, 5 pages. https://doi.org/10.1145/3242969.3243014
 # How to contribute
 
 We are delighted to receive your feedback and help on improving Sigmedia-AVSR. On the technical side, this could be
-an advice or a pull request for code refactoring (we are not Python/TensorFlow experts), adding implementations of a popular
+an advice or a pull request for code refactoring (we are not Python/TensorFlow experts), adding implementations of popular
 features, bug reports, performance improvements, language models, support for computation in 16 bit precision or on
 Google TPU devices.
 
