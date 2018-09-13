@@ -45,7 +45,7 @@ def _build_single_cell(cell_type, num_units, use_dropout, mode, dropout_probabil
                                state_keep_prob=dropout_probability[1],
                                output_keep_prob=dropout_probability[2],
                                variational_recurrent=False,
-                               # dtype=tf.float32,
+                               dtype=dtype,
                                # input_size=self._inputs.get_shape()[1:],
                                )
     if device is not None:
@@ -60,16 +60,11 @@ def build_rnn_layers(
         use_dropout,
         dropout_probability,
         mode,
-        base_gpu,
         dtype,
         residual_connections=False,
         highway_connections=False,
         as_list=False
     ):
-    if base_gpu is not None:
-        device = '/gpu:{}'.format(base_gpu)
-    else:
-        device = None
 
     cell_list = []
     for layer, units in enumerate(num_units_per_layer):
@@ -81,7 +76,7 @@ def build_rnn_layers(
             dropout_probability=dropout_probability,
             mode=mode,
             dtype=dtype,
-            device=device)
+        )
 
         if highway_connections is True and layer > 0:
             cell = HighwayWrapper(cell)

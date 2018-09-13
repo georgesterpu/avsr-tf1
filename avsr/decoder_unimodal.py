@@ -105,7 +105,6 @@ class Seq2SeqUnimodalDecoder(object):
                 dropout_probability=self._hparams.dropout_probability,
                 mode=self._mode,
                 dtype=self._hparams.dtype,
-                base_gpu=0  # decoder runs on a single GPU
             )
 
             self._construct_decoder_initial_state()

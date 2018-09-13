@@ -18,12 +18,11 @@ class Seq2SeqEncoder(object):
                  data,
                  mode,
                  hparams,
-                 gpu_id):
+                 ):
 
         self._data = data
         self._mode = mode
         self._hparams = hparams
-        self._gpu_id = gpu_id
 
         self._init_data()
         self._init_encoder()
@@ -62,7 +61,6 @@ class Seq2SeqEncoder(object):
                     mode=self._mode,
                     residual_connections=self._hparams.residual_encoder,
                     highway_connections=self._hparams.highway_encoder,
-                    base_gpu=self._gpu_id,
                     dtype=self._hparams.dtype,
                 )
 
@@ -84,7 +82,6 @@ class Seq2SeqEncoder(object):
                     use_dropout=self._hparams.use_dropout,
                     dropout_probability=self._hparams.dropout_probability,
                     mode=self._mode,
-                    base_gpu=self._gpu_id,
                     dtype=self._hparams.dtype,
                 )
 
@@ -94,7 +91,6 @@ class Seq2SeqEncoder(object):
                     use_dropout=self._hparams.use_dropout,
                     dropout_probability=self._hparams.dropout_probability,
                     mode=self._mode,
-                    base_gpu=self._gpu_id,
                     dtype=self._hparams.dtype,
                 )
 
@@ -176,7 +172,6 @@ class AttentiveEncoder(Seq2SeqEncoder):
                  data,
                  mode,
                  hparams,
-                 gpu_id,
                  attended_memory,
                  attended_memory_length):
         r"""
@@ -190,7 +185,7 @@ class AttentiveEncoder(Seq2SeqEncoder):
             data,
             mode,
             hparams,
-            gpu_id)
+        )
 
     def _init_encoder(self):
         with tf.variable_scope("Encoder") as scope:
@@ -204,7 +199,6 @@ class AttentiveEncoder(Seq2SeqEncoder):
                     use_dropout=self._hparams.use_dropout,
                     dropout_probability=self._hparams.dropout_probability,
                     mode=self._mode,
-                    base_gpu=self._gpu_id,
                     as_list=True,
                     dtype=self._hparams.dtype)
 

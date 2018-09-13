@@ -28,7 +28,6 @@ class Seq2SeqModel(object):
                     data=self._video_data,
                     mode=self._mode,
                     hparams=self._hparams,
-                    gpu_id=0 % self._hparams.num_gpus
                 )
         else:
             self._video_encoder = None
@@ -41,14 +40,12 @@ class Seq2SeqModel(object):
                         data=self._audio_data,
                         mode=self._mode,
                         hparams=self._hparams,
-                        gpu_id=1 % self._hparams.num_gpus
                     )
                 elif self._hparams.architecture == 'av_align':
                     self._audio_encoder = AttentiveEncoder(
                         data=self._audio_data,
                         mode=self._mode,
                         hparams=self._hparams,
-                        gpu_id=1 % self._hparams.num_gpus,
                         attended_memory=self._video_encoder.get_data().outputs,
                         attended_memory_length=self._video_data.inputs_length
                     )
