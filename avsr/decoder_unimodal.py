@@ -45,9 +45,8 @@ class Seq2SeqUnimodalDecoder(object):
 
         self._GO_ID = reverse_dict['GO']
         self._EOS_ID = reverse_dict['EOS']
-        self._sampling_probability_outputs = tf.constant(hparams.sampling_probability_outputs,
-                                                         dtype=self._hparams.dtype)
-        self._vocab_size = len(hparams.unit_dict) - 2  # num unique symbols we expect in the decoder's inputs
+        self._sampling_probability_outputs = hparams.sampling_probability_outputs
+        self._vocab_size = len(hparams.unit_dict) - 1  # num unique symbols we expect in the decoder's inputs
 
         self._global_step = tf.Variable(0, trainable=False, name='global_step')
 
@@ -78,12 +77,9 @@ class Seq2SeqUnimodalDecoder(object):
         else:
             with tf.variable_scope("embeddings"):
 
-                dtype = np.float16 if self._hparams.dtype.name=='float16' else np.float32
-                absval = np.divide(np.sqrt(3.0), self._vocab_size, dtype=dtype)
-
                 initialiser = tf.random_uniform_initializer(
-                    minval=absval,
-                    maxval=-absval,
+                    minval=-1.732 / self._vocab_size,
+                    maxval=1.732 / self._vocab_size,
                     dtype=self._hparams.dtype)
 
                 self._embedding_matrix = tf.get_variable(
@@ -91,7 +87,7 @@ class Seq2SeqUnimodalDecoder(object):
                     shape=[self._vocab_size, self._hparams.embedding_size],
                     initializer=initialiser,
                     dtype=self._hparams.dtype,
-                    trainable=True
+                    trainable=True if self._mode == 'train' else False,
                 )
 
     def _init_decoder(self):
