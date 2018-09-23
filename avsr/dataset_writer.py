@@ -72,6 +72,7 @@ class TFRecordWriter(object):
             snr_list = ('clean', )
 
         for idx, record in enumerate([train_record_name, test_record_name]):
+            makedirs(path.dirname(record), exist_ok=True)
 
             writers = []
             for snr in snr_list:
@@ -145,11 +146,21 @@ class TFRecordWriter(object):
                           bmp_dir,
                           output_resolution,
                           crop_lips=False):
+        r"""
+
+        :param train_record_name:
+        :param test_record_name:
+        :param bmp_dir:
+        :param output_resolution: (WIDTH, HEIGHT), opencv format
+        :param crop_lips:
+        :return:
+        """
 
         files = (self._train_files,
                  self._test_files,)
 
         for idx, record in enumerate([train_record_name, test_record_name]):
+            makedirs(path.dirname(record), exist_ok=True)
             writer = tf.python_io.TFRecordWriter(record)
 
             for file in files[idx]:
@@ -416,14 +427,23 @@ def read_bmp_dir(feature_dir, output_resolution, crop_lips=False):
         rows, cols, nchan = image.shape
         if crop_lips is True:
             image = image[(3*rows//5):, (1*cols//10):(9*cols//10), :]
-        resized = cv2.resize(image, output_resolution, interpolation=cv2.INTER_AREA,)  # area better when decimating
+
+        initial_area = np.prod(image.shape[0:2])
+        desired_area = np.prod(output_resolution)
+
+        if initial_area > desired_area:  # area better when decimating
+            interp_method = cv2.INTER_AREA
+        else:
+            interp_method = cv2.INTER_CUBIC
+
+        resized = cv2.resize(image, output_resolution, interpolation=interp_method)
         data.append(resized)
 
     video = np.asarray(data, dtype=np.float64)
 
     # for frame in video:
-    #     frame = cv2.resize(frame, (512, 512), interpolation=cv2.INTER_AREA)
-    #     cv2.imshow('video_stream', cv2.cvtColor(frame, code=cv2.COLOR_RGB2BGR))
+    #     frame = cv2.resize(frame, (512, 256), interpolation=cv2.INTER_CUBIC)
+    #     cv2.imshow('video_stream', (frame) / 255)
     #     cv2.waitKey(30)
     video = (video - 128) / 128
 
