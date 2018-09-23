@@ -58,9 +58,10 @@ def write_sequences_to_labelfile(sequence_dict, fname, original_dict):
     del items
 
 
-def get_files(file_list, dataset_dir):
+def get_files(file_list, dataset_dir, remove_sa=True):
     with open(file_list, 'r') as f:
         contents = f.read().splitlines()
 
-    contents = [path.join(dataset_dir, line.split()[0]) for line in contents]
+    contents = [path.join(dataset_dir, line.split()[0]) for line in contents
+                if '/sa' not in line]
     return contents
