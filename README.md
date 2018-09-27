@@ -112,7 +112,7 @@ Google TPU devices.
 
 # References
 
-[1]: Sequence to Sequence Learning with Neural Networks
+[1] Sequence to Sequence Learning with Neural Networks
 https://arxiv.org/abs/1409.3215
     
 [2] Neural Machine Translation by Jointly Learning to Align and Translate

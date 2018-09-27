@@ -3,7 +3,7 @@ from tensorflow.contrib import seq2seq
 from .cells import build_rnn_layers
 from tensorflow.python.layers.core import Dense
 from tensorflow.python.ops import array_ops
-import numpy as np
+from .devel import focal_loss, mc_loss
 
 
 class Seq2SeqUnimodalDecoder(object):
@@ -384,10 +384,20 @@ class Seq2SeqUnimodalDecoder(object):
             dtype=self._hparams.dtype
         )
 
+        if self._hparams.loss_fun is None:
+            softmax_loss_fun = None
+        elif self._hparams.loss_fun == 'focal_loss':
+            softmax_loss_fun = focal_loss
+        elif self._hparams.loss_fun == 'mc_loss':
+            softmax_loss_fun = mc_loss
+        else:
+            raise ValueError('Unknown loss function {}'.format(self._hparams.loss_fun))
+
         self.batch_loss = seq2seq.sequence_loss(
             logits=self._basic_decoder_train_outputs.rnn_output,
             targets=self._labels,
             weights=self._loss_weights,
+            softmax_loss_function=softmax_loss_fun,
             average_across_batch=True,
             average_across_timesteps=True)
 
