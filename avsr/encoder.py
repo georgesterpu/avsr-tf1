@@ -18,11 +18,13 @@ class Seq2SeqEncoder(object):
                  data,
                  mode,
                  hparams,
+                 num_units_per_layer
                  ):
 
         self._data = data
         self._mode = mode
         self._hparams = hparams
+        self._num_units_per_layer = num_units_per_layer
 
         self._init_data()
         self._init_encoder()
@@ -55,7 +57,7 @@ class Seq2SeqEncoder(object):
             if self._hparams.encoder_type == 'unidirectional':
                 self._encoder_cells = build_rnn_layers(
                     cell_type=self._hparams.cell_type,
-                    num_units_per_layer=self._hparams.encoder_units_per_layer,
+                    num_units_per_layer=self._num_units_per_layer,
                     use_dropout=self._hparams.use_dropout,
                     dropout_probability=self._hparams.dropout_probability,
                     mode=self._mode,
@@ -78,7 +80,7 @@ class Seq2SeqEncoder(object):
 
                 self._fw_cells = build_rnn_layers(
                     cell_type=self._hparams.cell_type,
-                    num_units_per_layer=self._hparams.encoder_units_per_layer,
+                    num_units_per_layer=self._num_units_per_layer,
                     use_dropout=self._hparams.use_dropout,
                     dropout_probability=self._hparams.dropout_probability,
                     mode=self._mode,
@@ -87,7 +89,7 @@ class Seq2SeqEncoder(object):
 
                 self._bw_cells = build_rnn_layers(
                     cell_type=self._hparams.cell_type,
-                    num_units_per_layer=self._hparams.encoder_units_per_layer,
+                    num_units_per_layer=self._num_units_per_layer,
                     use_dropout=self._hparams.use_dropout,
                     dropout_probability=self._hparams.dropout_probability,
                     mode=self._mode,
@@ -172,6 +174,7 @@ class AttentiveEncoder(Seq2SeqEncoder):
                  data,
                  mode,
                  hparams,
+                 num_units_per_layer,
                  attended_memory,
                  attended_memory_length):
         r"""
@@ -185,6 +188,7 @@ class AttentiveEncoder(Seq2SeqEncoder):
             data,
             mode,
             hparams,
+            num_units_per_layer,
         )
 
     def _init_encoder(self):
@@ -195,7 +199,7 @@ class AttentiveEncoder(Seq2SeqEncoder):
             if self._hparams.encoder_type == 'unidirectional':
                 self._encoder_cells = build_rnn_layers(
                     cell_type=self._hparams.cell_type,
-                    num_units_per_layer=self._hparams.encoder_units_per_layer,
+                    num_units_per_layer=self._num_units_per_layer,
                     use_dropout=self._hparams.use_dropout,
                     dropout_probability=self._hparams.dropout_probability,
                     mode=self._mode,
@@ -204,7 +208,7 @@ class AttentiveEncoder(Seq2SeqEncoder):
 
                 attention_mechanism, output_attention = create_attention_mechanism(
                     attention_type=self._hparams.attention_type[0][0],
-                    num_units=self._hparams.encoder_units_per_layer[-1],
+                    num_units=self._num_units_per_layer[-1],
                     memory=self._attended_memory,
                     memory_sequence_length=self._attended_memory_length,
                     mode=self._mode,

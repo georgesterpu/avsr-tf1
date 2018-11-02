@@ -28,6 +28,7 @@ class Seq2SeqModel(object):
                     data=self._video_data,
                     mode=self._mode,
                     hparams=self._hparams,
+                    num_units_per_layer=self._hparams.encoder_units_per_layer[0],
                 )
         else:
             self._video_encoder = None
@@ -40,14 +41,16 @@ class Seq2SeqModel(object):
                         data=self._audio_data,
                         mode=self._mode,
                         hparams=self._hparams,
+                        num_units_per_layer=self._hparams.encoder_units_per_layer[1],
                     )
                 elif self._hparams.architecture == 'av_align':
                     self._audio_encoder = AttentiveEncoder(
                         data=self._audio_data,
                         mode=self._mode,
                         hparams=self._hparams,
+                        num_units_per_layer=self._hparams.encoder_units_per_layer[1],
                         attended_memory=self._video_encoder.get_data().outputs,
-                        attended_memory_length=self._video_data.inputs_length
+                        attended_memory_length=self._video_data.inputs_length,
                     )
                 else:
                     raise Exception('Unknown architecture')
