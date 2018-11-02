@@ -19,7 +19,7 @@ def focal_loss(labels, logits, gamma=2.0):
     """
 
     num_classes = array_ops.shape(logits)[1]
-    onehot_labels = array_ops.one_hot(labels, num_classes)
+    onehot_labels = array_ops.one_hot(labels, num_classes, dtype=logits.dtype)
 
     p = nn_ops.softmax(logits)
     p = clip_ops.clip_by_value(p, 1e-7, 1.0 - 1e-7)
@@ -40,7 +40,7 @@ def mc_loss(labels, logits):
     """
 
     num_classes = array_ops.shape(logits)[1]
-    onehot_labels = array_ops.one_hot(labels, num_classes)
+    onehot_labels = array_ops.one_hot(labels, num_classes, dtype=logits.dtype)
 
     p = nn_ops.softmax(logits)
     p = clip_ops.clip_by_value(p, 1e-7, 1.0 - 1e-7)
