@@ -34,7 +34,7 @@ def main(argv):
         dropout_probability=(0.9, 0.9, 0.9),
         decoding_algorithm='beam_search',
         enable_attention=True,
-        encoder_units_per_layer=(128, 128, ),
+        encoder_units_per_layer=((), (128, 128, )),
         decoder_units_per_layer=(128, ),
         attention_type=(('scaled_luong', )*1, ('scaled_luong', )*1),
         beam_width=10,

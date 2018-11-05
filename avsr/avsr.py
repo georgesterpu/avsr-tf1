@@ -42,7 +42,7 @@ class AVSR(object):
                  residual_encoder=False,
                  cell_type='gru',
                  recurrent_regularisation=0.0001,
-                 encoder_units_per_layer=(128, 128,),
+                 encoder_units_per_layer=((128, 128), (128, 128)),
                  decoder_units_per_layer=(128,),
                  mwer_training=False,
                  enable_attention=True,
@@ -85,7 +85,7 @@ class AVSR(object):
             batch_size=batch_size,
             video_processing=video_processing,
             audio_processing=audio_processing,
-            max_label_length={'viseme': 65, 'phoneme': 70, 'character': 80}[unit],  # max lens from tcdtimit
+            max_label_length={'viseme': 65, 'phoneme': 70, 'character': 100}[unit],  # max lens from tcdtimit
             batch_normalisation=batch_normalisation,
             input_dense_layers=input_dense_layers,
             encoder_type=encoder_type,
