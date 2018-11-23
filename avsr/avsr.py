@@ -42,9 +42,8 @@ class AVSR(object):
                  residual_encoder=False,
                  cell_type='gru',
                  recurrent_regularisation=0.0001,
-                 encoder_units_per_layer=(128, 128,),
+                 encoder_units_per_layer=((128, 128), (128, 128)),
                  decoder_units_per_layer=(128,),
-                 mwer_training=False,
                  enable_attention=True,
                  attention_type=(('scaled_luong',)*1, ('scaled_luong',)*1),
                  use_dropout=True,
@@ -63,6 +62,56 @@ class AVSR(object):
                  precision='float32',
                  profiling=False,
                  ):
+        r"""
+
+        Args:
+            unit: A string that represents the decoded linguistic unit, one of ('phoneme', 'viseme', 'character')
+            unit_file: Path to a file storing the unit vocabulary, having one unit per line
+            video_processing: Visual CNN front-end,
+                one of ('features', 'resnet_cnn', '2dconv_cnn', '3dconv_cnn') or None
+            video_train_record: Path to a training .tfrecord file of visual examples
+            video_test_record: Path to a testing .tfrecord file of visual examples
+            audio_processing: Acoustic front-end, one of ('features', 'wav') or None.
+            audio_train_record: Path to a training .tfrecord file of acoustic examples
+            audio_test_record: Path to a testing .tfrecord file of acoustic examples
+            labels_train_record: Path to a training .tfrecord file of ground-truth transcriptions
+            labels_test_record: Path to a training .tfrecord file of ground-truth transcriptions
+            batch_size: Number of training examples/full sentences to be processed at once
+            cnn_filters: List holding the number of convolutional filters, one list element per CNN layer
+            cnn_dense_units: Output size of the CNN front-end, defines the visual feature size
+            batch_normalisation: Boolean
+            input_dense_layers: List holding the number of units of the optional fully-connected layers added after the
+                feature extraction stage, one list element per layer
+            architecture: One of ('unimodal', 'bimodal', 'av_align')
+            encoder_type: RNN encoder type, one of ('unidirectional', 'bidirectional')
+            highway_encoder: Boolean, optionally adds highway connections in the RNNs
+            residual_encoder: Boolean, optionally adds residual connections in the RNNs
+            cell_type: RNN cell type, one of ('lstm', 'gru'). See cells.py for more variants.
+            recurrent_regularisation: Boolean, L2 weight loss
+            encoder_units_per_layer: List holding the number of RNN units in each encoding layer
+            decoder_units_per_layer: List holding the number of RNN units in each decoding layer
+            enable_attention: Boolean
+            attention_type: One of ('luong', 'scaled_luong', 'bahdanau', 'normed_bahadau', 'scaled_monotonic_luong')
+            use_dropout: Boolean
+            dropout_probability: RNN dropout, list of 3 floats representing the keep probability of the
+                (input, state, output) units respectively
+            embedding_size: Linguistic unit embedding size, 0 means one-hot encodings, use a positive int to learn an
+                embedding matrix of size [vocabulary_size, embedding_size]
+            sampling_probability_outputs: Probability of the current decoding prediction id to be used as next input
+                instead of the ground truth unit id
+            decoding_algorithm: One of ('greedy', 'beam_search')
+            beam_width: Controls the beam size when using the `beam_search` algorithm
+            optimiser: One of ('Adam', 'AMSGrad')
+            learning_rate: Learning algorithm constant
+            loss_fun: Loss function. Use None for the default cross-entropy sequence loss, or one of
+                ('focal_loss', 'mc_loss) for alternative loss functions
+            clip_gradients: Boolean
+            max_gradient_norm: Gradient clipping constant, used when gradient clipping is enabled
+            num_gpus: deprecated
+            write_attention_alignment: Generates alignment images of the attention weights for visualisation purposes
+            precision: One of ('float32', 'float16')
+            profiling: Generates a runtime profile
+        """
 
         self._unit = unit
         self._unit_dict = create_unit_dict(unit_file=unit_file)
@@ -85,7 +134,7 @@ class AVSR(object):
             batch_size=batch_size,
             video_processing=video_processing,
             audio_processing=audio_processing,
-            max_label_length={'viseme': 65, 'phoneme': 70, 'character': 80}[unit],  # max lens from tcdtimit
+            max_label_length={'viseme': 65, 'phoneme': 70, 'character': 100}[unit],  # max lens from tcdtimit
             batch_normalisation=batch_normalisation,
             input_dense_layers=input_dense_layers,
             encoder_type=encoder_type,
