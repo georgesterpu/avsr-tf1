@@ -172,7 +172,6 @@ class TFRecordWriter(object):
                 contents = read_bmp_dir(feature_dir, output_resolution, crop_lips)
 
                 example = make_input_example(sentence_id, contents, 'video')
-
                 writer.write(example.SerializeToString())
 
             writer.close()
@@ -296,6 +295,11 @@ def apply_transform(data, transformation, engine):
     elif transformation == 'logmel_stack_w8s3':
         logmel = eval_audio_model(wav=data, engine=engine)
         logmel = _stack_features(logmel, window_len=8, stride=3)
+
+        return logmel
+    elif transformation == 'logmel_stack_w3s3':
+        logmel = eval_audio_model(wav=data, engine=engine)
+        logmel = _stack_features(logmel, window_len=3, stride=3)
 
         return logmel
 
@@ -445,6 +449,7 @@ def read_bmp_dir(feature_dir, output_resolution, crop_lips=False):
     #     frame = cv2.resize(frame, (512, 256), interpolation=cv2.INTER_CUBIC)
     #     cv2.imshow('video_stream', (frame) / 255)
     #     cv2.waitKey(30)
+
     video = (video - 128) / 128
 
     return video

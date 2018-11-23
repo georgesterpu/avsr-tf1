@@ -13,8 +13,8 @@ def batch_norm_relu(inputs, is_training, data_format):
     return inputs
 
 
-def conv2d_wrapper(inputs, filters, kernel_size, strides, data_format, padding='same', activation=None):
-    return tf.layers.conv2d(
+def conv2d_wrapper(inputs, filters, kernel_size, strides, data_format, padding='SAME', activation=None):
+    out =  tf.layers.conv2d(
         inputs=inputs,
         filters=filters,
         kernel_size=kernel_size,
@@ -26,9 +26,10 @@ def conv2d_wrapper(inputs, filters, kernel_size, strides, data_format, padding='
         data_format=data_format,
         activation=activation
     )
+    return out
 
 
-def conv3d_wrapper(inputs, filters, kernel_size, strides, data_format, padding='same', activation=None):
+def conv3d_wrapper(inputs, filters, kernel_size, strides, data_format, padding='SAME', activation=None):
     return tf.layers.conv3d(
         inputs=inputs,
         filters=filters,
@@ -43,11 +44,11 @@ def conv3d_wrapper(inputs, filters, kernel_size, strides, data_format, padding='
     )
 
 
-def projection_shortcut(inputs, filters, strides, data_format, padding='same'):
+def projection_shortcut(inputs, filters, strides, data_format, padding='SAME'):
     return conv2d_wrapper(inputs, filters, (1, 1), strides, data_format, padding=padding)
 
 
-def projection_shortcut_3d(inputs, filters, strides, data_format, padding='same'):
+def projection_shortcut_3d(inputs, filters, strides, data_format, padding='SAME'):
     return conv3d_wrapper(inputs, filters, (1, 1, 1), strides, data_format, padding=padding)
 
 
@@ -80,7 +81,7 @@ def residual_block(inputs, filters, kernel_size, strides, data_format, is_traini
 
     inputs = conv2d_wrapper(inputs, filters, kernel_size, strides, data_format)
     inputs = batch_norm_relu(inputs, is_training, data_format)
-    inputs = conv2d_wrapper(inputs, filters, kernel_size, 1, data_format)
+    inputs = conv2d_wrapper(inputs, filters, kernel_size, (1, 1), data_format)
 
     return inputs + shortcut
 
@@ -96,7 +97,7 @@ def residual_block_3d(inputs, filters, kernel_size, strides, data_format, is_tra
 
     inputs = conv3d_wrapper(inputs, filters, kernel_size, strides, data_format)
     inputs = batch_norm_relu(inputs, is_training, data_format)
-    inputs = conv3d_wrapper(inputs, filters, kernel_size, 1, data_format)
+    inputs = conv3d_wrapper(inputs, filters, kernel_size, (1, 1, 1), data_format)
 
     return inputs + shortcut
 
@@ -104,7 +105,7 @@ def residual_block_3d(inputs, filters, kernel_size, strides, data_format, is_tra
 def conv2d_cnn():
 
     def model(inputs, is_training, cnn_dense_units, cnn_filters):
-        data_format = 'channels_last'
+        data_format = 'channels_first'
         # inputs = tf.transpose(inputs, [0, 3, 1, 2])
         flow = (inputs * 2) - 1
 
@@ -122,7 +123,7 @@ def conv2d_cnn():
                 inputs=flow,
                 filters=num_filters,
                 kernel_size=(3, 3),
-                strides=1 if layer_id == 0 else 2,
+                strides=(1, 1) if layer_id == 0 else (2, 2),
                 data_format=data_format
             )
 
@@ -161,12 +162,11 @@ def resnet_cnn():
             flow = tf.transpose(inputs, [0, 3, 1, 2])
         else:
             flow = inputs
-
-        flow = conv2d_wrapper(flow, cnn_filters[0], (3, 3), 1, data_format=data_format)
+        flow = conv2d_wrapper(flow, cnn_filters[0], (3, 3), (1, 1), data_format=data_format)
         flow = batch_norm_relu(flow, is_training, data_format)
 
         flow = tf.identity(flow)  # ??
-        flow = residual_block(flow, cnn_filters[0], (3, 3), 1, data_format, is_training, project_shortcut=False, skip_bn=True)
+        flow = residual_block(flow, cnn_filters[0], (3, 3), (1, 1), data_format, is_training, project_shortcut=False, skip_bn=True)
 
         for layer_id, num_filters in enumerate(cnn_filters[1:]):
             flow = residual_block(flow, num_filters, (3, 3), (2, 2), data_format, is_training, project_shortcut=True)
@@ -180,7 +180,7 @@ def resnet_cnn():
             kernel = flow.get_shape().as_list()[1:-1]
             squeeze_axis = [1, 2]
 
-        final = conv2d_wrapper(flow, cnn_dense_units, kernel, (1,1), data_format, 'valid', tf.nn.relu)
+        final = conv2d_wrapper(flow, cnn_dense_units, kernel, (1,1), data_format, 'VALID', tf.nn.relu)
         final = tf.squeeze(final, axis=squeeze_axis)
 
         final = tf.identity(final)  # ??
@@ -207,7 +207,7 @@ def conv3d_cnn():
             # increase depth here
             # flow = residual_block(flow, num_filters, (3, 3), 1, data_format, is_training, project_shortcut=False)
 
-        final = conv3d_wrapper(flow, cnn_dense_units, [1] + flow.get_shape().as_list()[2:-1], (1, 1), data_format, 'valid', tf.nn.relu)
+        final = conv3d_wrapper(flow, cnn_dense_units, [1] + flow.get_shape().as_list()[2:-1], (1, 1), data_format, 'VALID', tf.nn.relu)
         final = tf.squeeze(final, axis=[2, 3])
 
         return final

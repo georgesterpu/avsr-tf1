@@ -33,7 +33,7 @@ def add_noise(orig_signal, noise_type, snr, sampling_rate):
 
     noise = noise_variance * noise_data
 
-    return orig_signal + noise
+    return np.expand_dims(orig_signal, axis=-1) + noise
 
 
 def add_noise_cached(orig_signal, noise_type, noise_data, snr):

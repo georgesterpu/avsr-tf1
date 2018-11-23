@@ -1,5 +1,6 @@
 from os import path
 
+
 def compute_wer(predictions_dict, ground_truth_dict, split_words=False):
     wer = 0
 
@@ -13,7 +14,6 @@ def compute_wer(predictions_dict, ground_truth_dict, split_words=False):
 
         er = levenshtein(ground_truth, prediction) / float(len(ground_truth))
         wer += er
-
 
     return wer / float(len(predictions_dict))
 
@@ -58,7 +58,7 @@ def write_sequences_to_labelfile(sequence_dict, fname, original_dict):
     del items
 
 
-def get_files(file_list, dataset_dir, remove_sa=True, shuffle_sentences=True):
+def get_files(file_list, dataset_dir, remove_sa=True, shuffle_sentences=False):
     with open(file_list, 'r') as f:
         contents = f.read().splitlines()
 
