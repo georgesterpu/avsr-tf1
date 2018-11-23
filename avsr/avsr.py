@@ -145,7 +145,6 @@ class AVSR(object):
             recurrent_regularisation=recurrent_regularisation,
             encoder_units_per_layer=encoder_units_per_layer,
             decoder_units_per_layer=decoder_units_per_layer,
-            mwer_training=mwer_training,
             bijective_state_copy=False,  # feature under testing
             enable_attention=enable_attention,
             attention_type=attention_type,
