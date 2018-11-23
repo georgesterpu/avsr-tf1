@@ -115,7 +115,7 @@ def make_iterator_from_one_record(data_record, label_record, unit_dict, batch_si
         def reduce_func(unused_key, windowed_dataset):
             return batching_fun(windowed_dataset)
 
-        dataset = tf.data.Dataset.apply(dataset, tf.contrib.data.group_by_window(
+        dataset = tf.data.Dataset.apply(dataset, tf.data.experimental.group_by_window(
             key_func=key_func, reduce_func=reduce_func, window_size=batch_size))
 
     dataset = dataset.prefetch(batch_size)
@@ -185,7 +185,7 @@ def make_iterator_from_two_records(video_record, audio_record, label_record, bat
         def reduce_func(unused_key, windowed_dataset):
             return batching_fun(windowed_dataset)
 
-        dataset = tf.data.Dataset.apply(dataset, tf.contrib.data.group_by_window(
+        dataset = tf.data.Dataset.apply(dataset, tf.data.experimental.group_by_window(
             key_func=key_func, reduce_func=reduce_func, window_size=batch_size))
 
     dataset = dataset.prefetch(batch_size)
@@ -261,24 +261,15 @@ def create_unit_dict(unit_file):
 
 # Possible feature: decode files on the fly
 #
-# def parse_files_function(example):
-#     from tensorflow.contrib.framework.python.ops import audio_ops
-#     wav_loader = tf.read_file(example)
-#     wav_tensor = audio_ops.decode_wav(wav_loader)
-#
-#     return wav_tensor
-#
-#
-# def make_iterator_from_filenames(files, batch_size, shuffle=False, reverse_input=False, bucket_width=-1, unit='phoneme'):
-#     labels = []
-#     for file in files:
-#         ground_truth = np.asarray(read_sentence_labels(file, unit))
-#         labels.append(_symbols_to_ints(ground_truth, unit))
-#
-#     order = tf.range(len(labels))
-#     d2 = tf.data.Dataset.from_tensor_slices(order)
-#     d2 = d2.map(lambda i: (files[i], labels[i]))
-#
-#
-#     dataset = tf.data.Dataset.from_tensor_slices(files)
-#     dataset = dataset.map(parse_files_function, num_parallel_calls=batch_size)
+def parse_files_function(example):
+    from tensorflow.contrib.framework.python.ops import audio_ops
+    wav_loader = tf.read_file(example)
+    wav_tensor = audio_ops.decode_wav(wav_loader)
+
+    return wav_tensor
+
+
+def make_iterator_from_filenames(files, unit_dict, batch_size, shuffle=False, num_cores=4):
+
+    dataset = tf.data.Dataset.from_tensor_slices(files)
+    dataset = dataset.map(parse_files_function, num_parallel_calls=batch_size)
