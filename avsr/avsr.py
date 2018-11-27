@@ -42,7 +42,8 @@ class AVSR(object):
                  highway_encoder=False,
                  residual_encoder=False,
                  cell_type='gru',
-                 recurrent_regularisation=0.0001,
+                 recurrent_l2_regularisation=0.0001,
+                 weight_decay=0.0001,
                  encoder_units_per_layer=((128, 128), (128, 128)),
                  decoder_units_per_layer=(128,),
                  enable_attention=True,
@@ -88,7 +89,8 @@ class AVSR(object):
             highway_encoder: Boolean, optionally adds highway connections in the RNNs
             residual_encoder: Boolean, optionally adds residual connections in the RNNs
             cell_type: RNN cell type, one of ('lstm', 'gru'). See cells.py for more variants.
-            recurrent_regularisation: Boolean, L2 weight loss
+            recurrent_l2_regularisation: Boolean, L2 weight loss
+            weight_decay: Float, Weight decay used by the AdamW optimiser.
             encoder_units_per_layer: List holding the number of RNN units in each encoding layer
             decoder_units_per_layer: List holding the number of RNN units in each decoding layer
             enable_attention: Boolean
@@ -143,7 +145,8 @@ class AVSR(object):
             highway_encoder=highway_encoder,
             residual_encoder=residual_encoder,
             cell_type=cell_type,
-            recurrent_regularisation=recurrent_regularisation,
+            recurrent_l2_regularisation=recurrent_l2_regularisation,
+            weight_decay=weight_decay,
             encoder_units_per_layer=encoder_units_per_layer,
             decoder_units_per_layer=decoder_units_per_layer,
             bijective_state_copy=False,  # feature under testing

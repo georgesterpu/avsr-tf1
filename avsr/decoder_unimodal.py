@@ -403,9 +403,9 @@ class Seq2SeqUnimodalDecoder(object):
 
         reg_loss = 0
 
-        if self._hparams.recurrent_regularisation is not None:
+        if self._hparams.recurrent_l2_regularisation is not None:
             regularisable_vars = _get_trainable_vars(self._hparams.cell_type)
-            reg = tf.contrib.layers.l2_regularizer(scale=self._hparams.recurrent_regularisation)
+            reg = tf.contrib.layers.l2_regularizer(scale=self._hparams.recurrent_l2_regularisation)
             reg_loss = tf.contrib.layers.apply_regularization(reg, regularisable_vars)
 
         if self._hparams.video_processing is not None:
@@ -428,7 +428,7 @@ class Seq2SeqUnimodalDecoder(object):
             from tensorflow.contrib.opt import AdamWOptimizer
             optimiser = AdamWOptimizer(
                 learning_rate=self._hparams.learning_rate,
-                weight_decay=0.0005,
+                weight_decay=self._hparams.weight_decay,
                 epsilon=1e-8 if self._hparams.dtype == tf.float32 else 1e-4,
             )
         elif self._hparams.optimiser == 'Momentum':
