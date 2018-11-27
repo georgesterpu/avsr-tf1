@@ -416,23 +416,41 @@ class Seq2SeqUnimodalDecoder(object):
 
         self.batch_loss = self.batch_loss + reg_loss
 
+        if self._hparams.loss_scaling > 1:
+            self.batch_loss *= self._hparams.loss_scaling
+
         if self._hparams.optimiser == 'Adam':
-            optimiser = tf.train.AdamOptimizer(learning_rate=self._hparams.learning_rate, epsilon=1e-8)
+            optimiser = tf.train.AdamOptimizer(
+                learning_rate=self._hparams.learning_rate,
+                epsilon=1e-8 if self._hparams.dtype == tf.float32 else 1e-4,
+            )
+        elif self._hparams.optimiser == 'AdamW':
+            from tensorflow.contrib.opt import AdamWOptimizer
+            optimiser = AdamWOptimizer(
+                learning_rate=self._hparams.learning_rate,
+                weight_decay=0.0005,
+                epsilon=1e-8 if self._hparams.dtype == tf.float32 else 1e-4,
+            )
         elif self._hparams.optimiser == 'Momentum':
             optimiser = tf.train.MomentumOptimizer(
                 learning_rate=self._hparams.learning_rate,
                 momentum=0.9,
-                use_nesterov=False)
+                use_nesterov=False
+            )
         elif self._hparams.optimiser == 'AMSGrad':
             from .AMSGrad import AMSGrad
             optimiser = AMSGrad(
-                learning_rate=self._hparams.learning_rate
+                learning_rate=self._hparams.learning_rate,
+                epsilon=1e-8 if self._hparams.dtype == tf.float32 else 1e-4,
             )
         else:
             raise Exception('Unsupported optimiser, try Adam')
 
         variables = tf.trainable_variables()
         gradients = tf.gradients(self.batch_loss, variables)
+
+        if self._hparams.loss_scaling > 1:
+            gradients = [tf.div(grad, self._hparams.loss_scaling) for grad in gradients]
 
         if self._hparams.clip_gradients is True:
             gradients, _ = tf.clip_by_global_norm(gradients, self._hparams.max_gradient_norm)

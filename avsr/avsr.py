@@ -35,6 +35,7 @@ class AVSR(object):
                  cnn_filters=(8, 16, 32, 64),
                  cnn_dense_units=128,
                  batch_normalisation=True,
+                 instance_normalisation=False,
                  input_dense_layers=(0,),
                  architecture='unimodal',
                  encoder_type='unidirectional',
@@ -112,7 +113,6 @@ class AVSR(object):
             precision: One of ('float32', 'float16')
             profiling: Generates a runtime profile
         """
-
         self._unit = unit
         self._unit_dict = create_unit_dict(unit_file=unit_file)
 
@@ -136,6 +136,7 @@ class AVSR(object):
             audio_processing=audio_processing,
             max_label_length={'viseme': 65, 'phoneme': 70, 'character': 100}[unit],  # max lens from tcdtimit
             batch_normalisation=batch_normalisation,
+            instance_normalisation=instance_normalisation,
             input_dense_layers=input_dense_layers,
             encoder_type=encoder_type,
             architecture=architecture,
@@ -156,13 +157,14 @@ class AVSR(object):
             beam_width=beam_width,
             use_ctc=False,
             optimiser=optimiser,
+            loss_scaling=128 if precision == 'float16' else 1,
             learning_rate=learning_rate,
             loss_fun=loss_fun,
             clip_gradients=clip_gradients,
             max_gradient_norm=max_gradient_norm,
             num_gpus=num_gpus,
             write_attention_alignment=write_attention_alignment,
-            dtype=tf.float16 if precision=='float16' else tf.float32,
+            dtype=tf.float16 if precision == 'float16' else tf.float32,
             profiling=profiling
         )
 
@@ -230,8 +232,8 @@ class AVSR(object):
             try:
                 while True:
                     out = self._train_session.run([self._train_model.model.train_op,
-                                                   self._train_model.model.batch_loss, ],
-                                                  **self.sess_opts)
+                                                   self._train_model.model.batch_loss,
+                                                   ], **self.sess_opts)
 
                     if self._hparams.profiling is True:
                         self.profiler.add_step(batches, self.run_meta)
