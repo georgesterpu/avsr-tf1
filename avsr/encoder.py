@@ -43,6 +43,11 @@ class Seq2SeqEncoder(object):
                 training=(self._mode == 'train'),
                 fused=True,
             )
+        if self._hparams.instance_normalisation is True:
+            from tensorflow.contrib.layers import instance_norm
+            self._inputs = instance_norm(
+                inputs=self._inputs,
+            )
 
     def _init_encoder(self):
         r"""
