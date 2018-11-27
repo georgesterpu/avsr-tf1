@@ -379,6 +379,8 @@ class Seq2SeqUnimodalDecoder(object):
         Computes the batch_loss function to be minimised
         """
 
+        self._init_lr_decay()
+
         self._loss_weights = tf.sequence_mask(
             lengths=self._labels_len,
             dtype=self._hparams.dtype
@@ -421,26 +423,26 @@ class Seq2SeqUnimodalDecoder(object):
 
         if self._hparams.optimiser == 'Adam':
             optimiser = tf.train.AdamOptimizer(
-                learning_rate=self._hparams.learning_rate,
+                learning_rate=self.current_lr,
                 epsilon=1e-8 if self._hparams.dtype == tf.float32 else 1e-4,
             )
         elif self._hparams.optimiser == 'AdamW':
             from tensorflow.contrib.opt import AdamWOptimizer
             optimiser = AdamWOptimizer(
-                learning_rate=self._hparams.learning_rate,
+                learning_rate=self.current_lr,
                 weight_decay=self._hparams.weight_decay,
                 epsilon=1e-8 if self._hparams.dtype == tf.float32 else 1e-4,
             )
         elif self._hparams.optimiser == 'Momentum':
             optimiser = tf.train.MomentumOptimizer(
-                learning_rate=self._hparams.learning_rate,
+                learning_rate=self.current_lr,
                 momentum=0.9,
                 use_nesterov=False
             )
         elif self._hparams.optimiser == 'AMSGrad':
             from .AMSGrad import AMSGrad
             optimiser = AMSGrad(
-                learning_rate=self._hparams.learning_rate,
+                learning_rate=self.current_lr,
                 epsilon=1e-8 if self._hparams.dtype == tf.float32 else 1e-4,
             )
         else:
@@ -537,6 +539,21 @@ class Seq2SeqUnimodalDecoder(object):
         )
 
         return attention_cells, initial_state
+
+    def _init_lr_decay(self):
+
+        if self._hparams.lr_decay is None:
+            self.current_lr = self._hparams.learning_rate
+
+        elif self._hparams.lr_decay[0] == 'cosine_restarts':
+            self.current_lr = tf.train.cosine_decay_restarts(
+                learning_rate=self._hparams.learning_rate,
+                global_step=self._global_step,
+                first_decay_steps=self._hparams.lr_decay[1],
+            )
+        else:
+            print('learning rate policy not implemented, falling back to constant learning rate')
+            self.current_lr = self._hparams.learning_rate
 
 
 def _get_trainable_vars(cell_type):
