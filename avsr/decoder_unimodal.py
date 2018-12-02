@@ -355,7 +355,7 @@ class Seq2SeqUnimodalDecoder(object):
         r"""
         Generates the alignment images, useful for visualisation/debugging purposes
         """
-        attention_alignment = states.alignment_history.stack()
+        attention_alignment = states.alignment_history[0].stack()
 
         attention_images = tf.expand_dims(tf.transpose(attention_alignment, [1, 2, 0]), -1)
 
@@ -526,7 +526,7 @@ class Seq2SeqUnimodalDecoder(object):
             attention_mechanism=attention_mechanisms,
             attention_layer_size=layer_sizes,
             # initial_cell_state=decoder_initial_state,
-            alignment_history=False,
+            alignment_history=self._hparams.write_attention_alignment,
             output_attention=self._output_attention,
         )
 

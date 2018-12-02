@@ -307,7 +307,7 @@ class AVSR(object):
                            data.labels_filenames,]
 
         if self._write_attention_alignment is True:
-            session_outputs.append(self._evaluate_model.model.attention_summary)
+            session_outputs.append(self._evaluate_model.model._decoder.attention_summary)
 
         while True:
 
@@ -332,8 +332,9 @@ class AVSR(object):
                     file = out[2][idx].decode('utf-8')
 
                     if self._write_attention_alignment is True:
-                        makedirs(alignments_outdir, exist_ok=True)
-                        with tf.gfile.GFile(path.join(alignments_outdir, file + '.png'), mode='w') as img_f:
+                        fname = path.join(alignments_outdir, file + '.png')
+                        makedirs(path.dirname(fname), exist_ok=True)
+                        with tf.gfile.GFile(fname, mode='w') as img_f:
                             img_f.write(imag_summ.value[idx].image.encoded_image_string)
 
                     predictions_dict[file] = predicted_symbs
