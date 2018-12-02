@@ -224,7 +224,7 @@ class AttentiveEncoder(Seq2SeqEncoder):
                     cell=self._encoder_cells[-1],
                     attention_mechanism=attention_mechanism,
                     attention_layer_size=self._hparams.decoder_units_per_layer[-1],
-                    alignment_history=False,
+                    alignment_history=self._hparams.write_attention_alignment,
                     output_attention=output_attention,
                 )
 
@@ -239,6 +239,26 @@ class AttentiveEncoder(Seq2SeqEncoder):
                     dtype=self._hparams.dtype,
                     scope=scope,
                     )
+
+                if self._hparams.write_attention_alignment is True:
+                    self.attention_summary = self._create_attention_alignments_summary(self._encoder_final_state[-1])
+
+    def _create_attention_alignments_summary(self, states):
+        r"""
+        Generates the alignment images, useful for visualisation/debugging purposes
+        """
+        attention_alignment = states.alignment_history.stack()
+
+        attention_images = tf.expand_dims(tf.transpose(attention_alignment, [1, 2, 0]), -1)
+
+        # attention_images_scaled = tf.image.resize_images(1-attention_images, (256,128))
+        attention_images_scaled = 1 - attention_images
+
+        attention_summary = tf.summary.image("attention_images_cm", attention_images_scaled,
+                                             max_outputs=self._hparams.batch_size[1])
+
+        return attention_summary
+
 
     def get_data(self):
 

@@ -308,6 +308,9 @@ class AVSR(object):
 
         if self._write_attention_alignment is True:
             session_outputs.append(self._evaluate_model.model._decoder.attention_summary)
+            if self._hparams.architecture == 'av_align':
+                session_outputs.append(self._evaluate_model.model._audio_encoder.attention_summary)
+
 
         while True:
 
@@ -320,7 +323,11 @@ class AVSR(object):
 
                 if self._write_attention_alignment is True:
                     imag_summ = tf.Summary()
-                    imag_summ.ParseFromString(out[-1])
+                    imag_summ.ParseFromString(out[4])
+
+                    if self._hparams.architecture == 'av_align':
+                        cross_modal_summary = tf.Summary()
+                        cross_modal_summary.ParseFromString(out[5])
 
                 for idx in range(len(out[2])):  # could use batch_size here, but take care with the last smaller batch
                     predicted_ids = out[0][idx]
@@ -336,6 +343,11 @@ class AVSR(object):
                         makedirs(path.dirname(fname), exist_ok=True)
                         with tf.gfile.GFile(fname, mode='w') as img_f:
                             img_f.write(imag_summ.value[idx].image.encoded_image_string)
+
+                        if self._hparams.architecture == 'av_align':
+                            fname = path.join(alignments_outdir, file + '_av.png')
+                            with tf.gfile.GFile(fname, mode='w') as img_f:
+                                img_f.write(cross_modal_summary.value[idx].image.encoded_image_string)
 
                     predictions_dict[file] = predicted_symbs
                     labels_dict[file] = labels_symbs
