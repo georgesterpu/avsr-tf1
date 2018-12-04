@@ -140,7 +140,7 @@ def conv2d_cnn():
 def resnet_cnn():
 
     def model(inputs, is_training, cnn_dense_units, cnn_filters):
-        data_format = 'channels_first'
+        data_format = 'channels_last'
 
         # random_flip = lambda img: tf.image.random_flip_left_right(img, seed=1001)
         # random_contrast = lambda img: tf.image.random_contrast(img, lower=0.8, upper=1.2, seed=1002)
