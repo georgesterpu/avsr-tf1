@@ -156,7 +156,7 @@ def make_iterator_from_two_records(video_record, audio_record, label_record, bat
     dataset = tf.data.Dataset.zip((dataset1, dataset2))
 
     if shuffle is True:
-        dataset = dataset.shuffle(buffer_size=5000)
+        dataset = dataset.shuffle(buffer_size=5000, reshuffle_each_iteration=True)
 
     # TODO (cba, two stacked lists of inputs)
     # if reverse_input is True:
