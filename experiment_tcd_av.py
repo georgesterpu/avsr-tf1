@@ -29,7 +29,7 @@ def main(argv):
         architecture='av_align',
         clip_gradients=True,
         max_gradient_norm=1.0,
-        recurrent_regularisation=0.0001,
+        recurrent_l2_regularisation=0.0001,
         cell_type='gru',
         highway_encoder=False,
         sampling_probability_outputs=0.1,

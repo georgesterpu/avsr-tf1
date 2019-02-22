@@ -40,12 +40,13 @@ class Seq2SeqBimodalDecoder(object):
 
         self._global_step = tf.Variable(0, trainable=False, name='global_step')
 
+        self._batch_size, _ = tf.unstack(tf.shape(self._labels))
+
         # create model
         self._infer_num_valid_streams()
 
         self._add_special_symbols()
         self._init_embedding()
-        self._construct_decoder_initial_state()
         self._prepare_attention_memories()
         self._init_decoder()
 
@@ -102,8 +103,9 @@ class Seq2SeqBimodalDecoder(object):
                 dropout_probability=self._hparams.dropout_probability,
                 mode=self._mode,
                 dtype=self._hparams.dtype,
-                base_gpu=0  # decoder runs on a single GPU
             )
+
+            self._construct_decoder_initial_state()
 
             self._dense_layer = Dense(self._vocab_size,
                                       name='my_dense',
@@ -139,36 +141,29 @@ class Seq2SeqBimodalDecoder(object):
             audio_state = tuple([LSTMStateTuple(c=zero_slice[0], h=zero_slice[1])
                                  for _ in range(len(self._hparams.encoder_units_per_layer))])
 
-        state_tuples = []
-
-        if len(self._hparams.encoder_units_per_layer) == 1:
-            video_state = (video_state, )
-            audio_state = (audio_state, )
-
-        for i in range(len(self._hparams.encoder_units_per_layer)):
-            cat_c = tf.concat((video_state[i].c, audio_state[i].c), axis=-1)
-            cat_h = tf.concat((video_state[i].h, audio_state[i].h), axis=-1)
-            state_tuples.append(LSTMStateTuple(c=cat_c, h=cat_h))
-
-        state_tuples = tuple(state_tuples)
-
-        if len(self._hparams.encoder_units_per_layer) == 1:
-            state_tuples = state_tuples[0]
-
-        if len(self._hparams.decoder_units_per_layer) != len(self._hparams.encoder_units_per_layer):
-            # option 1
-            # self._decoder_initial_state = state_tuples[-1]
-            # make sure that encoder_units[-1] == decoder_units[0]
-            # to make the N layer encoder -> 1 layer decoder arch work
-
-            # option 2
-
-            self._decoder_initial_state = _project_lstm_state_tuple(
-                state_tuples, num_units=self._hparams.decoder_units_per_layer[0])
+        if type(video_state) == tuple:
+            final_video_state = video_state[-1]
         else:
-            self._decoder_initial_state = state_tuples
-            # make sure that encoder_units[i] == decoder_units[i] for i in num_layers
-            # to make the N layer encoder -> N layer decoder arch work
+            final_video_state = video_state
+
+        if type(audio_state) == tuple:
+            final_audio_state = audio_state[-1]
+        else:
+            final_audio_state = audio_state
+
+        state_tuple = (final_video_state, final_audio_state,)
+
+        self._decoder_initial_state = _project_state_tuple(
+            state_tuple, num_units=self._hparams.decoder_units_per_layer[0], cell_type=self._hparams.cell_type)
+
+        dec_layers = len(self._hparams.decoder_units_per_layer)
+
+        if dec_layers > 1:
+            self._decoder_initial_state = [self._decoder_initial_state, ]
+            zero_state = self._decoder_cells.zero_state(self._batch_size, self._hparams.dtype)
+            for j in range(dec_layers - 1):
+                self._decoder_initial_state.append(zero_state[j + 1])
+            self._decoder_initial_state = tuple(self._decoder_initial_state)
 
     def _prepare_attention_memories(self):
         if self._video_output is not None:
@@ -477,9 +472,9 @@ class Seq2SeqBimodalDecoder(object):
 
         reg_loss = 0
 
-        if self._hparams.recurrent_regularisation is not None:
+        if self._hparams.recurrent_l2_regularisation is not None:
             regularisable_vars = _get_trainable_vars(self._hparams.cell_type)
-            reg = tf.contrib.layers.l2_regularizer(scale=self._hparams.recurrent_regularisation)
+            reg = tf.contrib.layers.l2_regularizer(scale=self._hparams.recurrent_l2_regularisation)
             reg_loss = tf.contrib.layers.apply_regularization(reg, regularisable_vars)
 
         if self._hparams.video_processing is not None:
@@ -542,3 +537,27 @@ def _project_lstm_state_tuple(state_tuple, num_units):
     projected_state = tf.contrib.rnn.LSTMStateTuple(c=proj_c, h=proj_h)
 
     return projected_state
+
+
+def _project_gru_state_tuple(state_tuple, num_units):
+
+    state_proj_layer = Dense(num_units, name='state_projection', use_bias=False)
+
+    cat = tf.concat([state for state in state_tuple], axis=-1)
+    projected_state = state_proj_layer(cat)
+
+    return projected_state
+
+
+def _project_state_tuple(state_tuple, num_units, cell_type):
+
+    if cell_type == 'lstm':
+        state = _project_lstm_state_tuple(state_tuple, num_units)
+    else:
+        try:
+            state = _project_gru_state_tuple(state_tuple, num_units)
+        except Exception:
+            print('Undefined state fusion behaviour for this cell type: {}'.format(cell_type))
+            raise
+
+    return state
