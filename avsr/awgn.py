@@ -63,7 +63,7 @@ def add_noise_cached(orig_signal, noise_type, noise_data, snr):
 def random_segment(data, target_len):
     from random import randint
 
-    start_limit = len(data) - target_len + 1
+    start_limit = len(data) - target_len
     start = randint(0, start_limit)
 
     return data[start:start + target_len]
