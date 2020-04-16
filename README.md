@@ -1,6 +1,6 @@
 # AVSR-tf1
 
-Audio-Visual Speech Recognition (AVSR) research system using sequence-to-sequence neural networks based on TensorFlow
+Audio-Visual Speech Recognition (AVSR) research system using sequence-to-sequence neural networks based on TensorFlow 1.13
 
 # About
 
@@ -8,11 +8,11 @@ AVSR-tf1 is an open-source research system for Speech Recognition.
 
 Written entirely in Python, AVSR-tf1 aims to provide a simple and reproducible way of training and evaluating
 speech recognition models based on sequence to sequence neural networks. AVSR-tf1 can exploit both auditory
-and visual speech modalities, considered either independently (ASR, VSR) or together (AVSR).
+and visual speech modalities, considered either independently (ASR, VSR) or jointly (AVSR).
 
 Rather than providing a dense documentation to the users and contributors, the AVSR-tf1 code is designed
 (or strives) to be intuitive and self-explanatory, encouraging researchers and developers to understand the entire
-codebase and propose improvements at its lowest levels. Hence we want it be more of a flexible research system than
+codebase and propose improvements at its lowest levels. Hence we want it to be more of a flexible research system than
 a black box for production.
 
 # Core functionalities
@@ -31,7 +31,7 @@ a black box for production.
 * visual-only (lip-reading [5])
 * audio-visual fusion
     * dual-attention decoder (WLAS [4])
-    * attention-based alignment (AV-Align [6])
+    * attention-based alignment (AV-Align [6, 7])
 * flexible language units (phonemes, visemes, characters etc.)
  
 #### 4. Evaluate models
@@ -56,7 +56,10 @@ To prepare the data, you can use the two scripts `extract_faces.py` and `write_r
 For visual/audio-visual experiments, please compile from source install [OpenFace](https://github.com/TadasBaltrusaitis/OpenFace)
 
 The other dependencies are popular and easy to install Python packages, so feel free to use your preferred sources.
-Unless otherwise stated, all dependencies should be kept updated to their latest stable versions to avoid compatibility issues.
+
+The supported TensorFlow version for this repository is 1.13.1, and the recommended install source is: `pip install tensorflow_gpu==1.13.1`.
+
+Please get in touch in case you face any issues.
 
 # Acknowledgements
 
@@ -68,6 +71,32 @@ Our work is supported by NVIDIA, which granted us a Titan Xp GPU through its aca
 # How to cite
 
 If you use this work, please cite it as:
+
+George Sterpu, Christian Saam. Naomi Harte.
+How to Teach DNNs to Pay Attention to the Visual Modality in Speech Recognition.
+IEEE/ACM Transactions on Audio, Speech, and Language Processing, 2020. https://doi.org/10.1109/TASLP.2020.2980436
+
+<details><summary>[bib]</summary> 
+<p>
+
+```
+@ARTICLE{Sterpu2020,
+  author={G. {Sterpu} and C. {Saam} and N. {Harte}},
+  journal={IEEE/ACM Transactions on Audio, Speech, and Language Processing},
+  title={How to Teach DNNs to Pay Attention to the Visual Modality in Speech Recognition},
+  year={2020},
+  volume={},
+  number={},
+ pages={1-1},
+}
+```
+
+</p>
+</details>
+
+[[pdf]](https://raw.githubusercontent.com/georgesterpu/georgesterpu.github.io/master/papers/taslp2020.pdf) 
+
+or
 
 George Sterpu, Christian Saam, and Naomi Harte. 2018. 
 Attention-based Audio-Visual Fusion for Robust Automatic Speech Recognition. 
@@ -122,7 +151,7 @@ https://arxiv.org/abs/1805.11685
 [6] Attention-based Audio-Visual Fusion for Robust Automatic Speech Recognition
 https://arxiv.org/abs/1809.01728
 
-# Contact
+[7] How to Teach DNNs to Pay Attention to the Visual Modality in Speech Recognition
+https://ieeexplore.ieee.org/document/9035650
 
-George Sterpu sterpug [at] tcd.ie
 
