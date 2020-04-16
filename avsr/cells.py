@@ -1,10 +1,9 @@
+import tensorflow as tf
 from tensorflow.contrib.rnn import MultiRNNCell, DeviceWrapper, DropoutWrapper, \
     LSTMCell, GRUCell, LSTMBlockCell, UGRNNCell, NASCell, GRUBlockCellV2, \
     HighwayWrapper, ResidualWrapper
-import tensorflow as tf
-from tensorflow.contrib import seq2seq
 
-
+from tensorflow.contrib.rnn.python.ops.rnn_cell import LayerNormLSTMCell, LayerNormBasicLSTMCell
 def _build_single_cell(cell_type, num_units, use_dropout, mode, dropout_probability, dtype, device=None):
     r"""
 
@@ -17,6 +16,11 @@ def _build_single_cell(cell_type, num_units, use_dropout, mode, dropout_probabil
                          cell_clip=1.0,
                          initializer=tf.variance_scaling_initializer(),
                          dtype=dtype)
+    elif cell_type == 'layernorm_lstm':
+        cells = LayerNormLSTMCell(num_units=num_units,
+                                  cell_clip=1.0)
+    elif cell_type == 'layernorm_basiclstm':
+        cells = LayerNormBasicLSTMCell(num_units=num_units)
     elif cell_type == 'gru':
         cells = GRUCell(num_units=num_units,
                         kernel_initializer=tf.variance_scaling_initializer(),
@@ -63,25 +67,29 @@ def build_rnn_layers(
         dtype,
         residual_connections=False,
         highway_connections=False,
-        as_list=False
+        weight_sharing=False,
+        as_list=False,
     ):
 
     cell_list = []
     for layer, units in enumerate(num_units_per_layer):
 
-        cell = _build_single_cell(
-            cell_type=cell_type,
-            num_units=units,
-            use_dropout=use_dropout,
-            dropout_probability=dropout_probability,
-            mode=mode,
-            dtype=dtype,
-        )
+        if layer > 1 and weight_sharing is True:
+            cell = cell_list[-1]
+        else:
+            cell = _build_single_cell(
+                cell_type=cell_type,
+                num_units=units,
+                use_dropout=use_dropout,
+                dropout_probability=dropout_probability,
+                mode=mode,
+                dtype=dtype,
+            )
 
-        if highway_connections is True and layer > 0:
-            cell = HighwayWrapper(cell)
-        elif residual_connections is True and layer > 0:
-            cell = ResidualWrapper(cell)
+            if highway_connections is True and layer > 0:
+                cell = HighwayWrapper(cell)
+            elif residual_connections is True and layer > 0:
+                cell = ResidualWrapper(cell)
 
         cell_list.append(cell)
 
@@ -92,77 +100,3 @@ def build_rnn_layers(
             return MultiRNNCell(cell_list)
         else:
             return cell_list
-
-
-def create_attention_mechanism(
-        attention_type,
-        num_units,
-        memory,
-        memory_sequence_length,
-        mode,
-        dtype):
-
-    if attention_type == 'bahdanau':
-        attention_mechanism = seq2seq.BahdanauAttention(
-            num_units=num_units,
-            memory=memory,
-            memory_sequence_length=memory_sequence_length,
-            normalize=False,
-            dtype=dtype,
-        )
-        output_attention = False
-    elif attention_type == 'normed_bahdanau':
-        attention_mechanism = seq2seq.BahdanauAttention(
-            num_units=num_units,
-            memory=memory,
-            memory_sequence_length=memory_sequence_length,
-            normalize=True,
-            dtype=dtype,
-        )
-        output_attention = False
-    elif attention_type == 'normed_monotonic_bahdanau':
-        attention_mechanism = seq2seq.BahdanauMonotonicAttention(
-            num_units=num_units,
-            memory=memory,
-            memory_sequence_length=memory_sequence_length,
-            normalize=True,
-            score_bias_init=-2.0,
-            sigmoid_noise=1.0 if mode == 'train' else 0.0,
-            mode='hard' if mode != 'train' else 'parallel',
-            dtype=dtype,
-        )
-        output_attention = False
-    elif attention_type == 'luong':
-        attention_mechanism = seq2seq.LuongAttention(
-            num_units=num_units,
-            memory=memory,
-            memory_sequence_length=memory_sequence_length,
-            dtype=dtype,
-        )
-        output_attention = True
-    elif attention_type == 'scaled_luong':
-        attention_mechanism = seq2seq.LuongAttention(
-            num_units=num_units,
-            memory=memory,
-            memory_sequence_length=memory_sequence_length,
-            scale=True,
-            dtype=dtype,
-        )
-        output_attention = True
-    elif attention_type == 'scaled_monotonic_luong':
-        attention_mechanism = seq2seq.LuongMonotonicAttention(
-            num_units=num_units,
-            memory=memory,
-            memory_sequence_length=memory_sequence_length,
-            scale=True,
-            score_bias_init=-2.0,
-            sigmoid_noise=1.0 if mode == 'train' else 0.0,
-            mode='hard' if mode != 'train' else 'parallel',
-            dtype=dtype,
-        )
-        output_attention = True
-    else:
-        raise Exception('unknown attention mechanism')
-
-    return attention_mechanism, output_attention
-

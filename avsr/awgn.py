@@ -81,3 +81,4 @@ def cache_noise(noise_type, sampling_rate):
         raise Exception('unknown noise type, did you mean `white` ?')
 
     return noise_data
+
