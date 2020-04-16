@@ -1,22 +1,19 @@
-# Sigmedia-AVSR
+# AVSR-tf1
 
 Audio-Visual Speech Recognition (AVSR) research system using sequence-to-sequence neural networks based on TensorFlow
 
 # About
 
-Sigmedia-AVSR is an open-source research system for Speech Recognition, developed by the Sigmedia team
-in Trinity College Dublin, Ireland.
+AVSR-tf1 is an open-source research system for Speech Recognition.
 
-Written entirely in Python, Sigmedia-AVSR aims to provide a simple and reproducible way of training and evaluating
-speech recognition models based on sequence to sequence neural networks. Sigmedia-AVSR can exploit both auditory
+Written entirely in Python, AVSR-tf1 aims to provide a simple and reproducible way of training and evaluating
+speech recognition models based on sequence to sequence neural networks. AVSR-tf1 can exploit both auditory
 and visual speech modalities, considered either independently (ASR, VSR) or together (AVSR).
 
-Rather than providing a dense documentation to the users and contributors, the Sigmedia-AVSR code is designed
+Rather than providing a dense documentation to the users and contributors, the AVSR-tf1 code is designed
 (or strives) to be intuitive and self-explanatory, encouraging researchers and developers to understand the entire
 codebase and propose improvements at its lowest levels. Hence we want it be more of a flexible research system than
-a black box for production. For didactic purposes, please refer to Sigmedia-ASR, which is the single modality
-precursor written in a more compact form and no longer maintained.
-
+a black box for production.
 
 # Core functionalities
 
@@ -53,7 +50,6 @@ Please refer to the attached examples for running audio-only, visual-only, or au
 
 To prepare the data, you can use the two scripts `extract_faces.py` and `write_records_tcd.py`
 
-For faster prototyping, we recommend checking out our publicly available audio-visual dataset, [TCD-TIMIT](https://sigmedia.tcd.ie/TCDTIMIT/)
 
 # Dependencies
 
@@ -64,14 +60,10 @@ Unless otherwise stated, all dependencies should be kept updated to their latest
 
 # Acknowledgements
 
-We are grateful to Eugene Brevdo of Google for his remarkable help and advice during the early stages of Sigmedia-ASR 
-(precursor of Sigmedia-AVSR) development. In addition, we would like to thank 
+We are grateful to Eugene Brevdo of Google for his remarkable help and advice during the early stages of development. In addition, we would like to thank 
 Derek Murray, Andreas Steiner, Khe Chai Sim for the assistance and interesting conversations, and also every
 TensorFlow contributor on GitHub and StackOverflow. 
 Our work is supported by NVIDIA, which granted us a Titan Xp GPU through its academic program.
-
-George wishes to thank Naomi Harte for her unmatched guidance as a PhD advisor, and also Christian Saam for his great
-dedication and time spent discussing ideas for sequence to sequence networks.
 
 # How to cite
 
@@ -105,7 +97,7 @@ ACM, New York, NY, USA, 5 pages. https://doi.org/10.1145/3242969.3243014
 
 # How to contribute
 
-We are delighted to receive your feedback and help on improving Sigmedia-AVSR. On the technical side, this could be
+We are delighted to receive your feedback and help on improving AVSR-tf1. On the technical side, this could be
 an advice or a pull request for code refactoring (we are not Python/TensorFlow experts), adding implementations of popular
 features, bug reports, performance improvements, language models, support for computation in 16 bit precision or on
 Google TPU devices.
@@ -132,5 +124,5 @@ https://arxiv.org/abs/1809.01728
 
 # Contact
 
-George Sterpu sterpug [at] tcd.ie  
-Dr. Naomi Harte nharte [at] tcd.ie
+George Sterpu sterpug [at] tcd.ie
+
