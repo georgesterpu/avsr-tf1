@@ -13,10 +13,16 @@ class TFRecordWriter(object):
     def __init__(self,
                  train_files,
                  test_files,
-                 label_map):
+                 label_map,
+                 remove_ext=True):
 
-        self._train_files = _remove_extensions(train_files)
-        self._test_files = _remove_extensions(test_files)
+        if remove_ext is True:
+            self._train_files = _remove_extensions(train_files)
+            self._test_files = _remove_extensions(test_files)
+        else:
+            self._train_files = train_files
+            self._test_files = test_files
+
         self._label_map = label_map
 
     def write_labels_records(self,
@@ -32,7 +38,7 @@ class TFRecordWriter(object):
         files = (self._train_files, self._test_files)
         for idx, record in enumerate([train_record_name, test_record_name]):
             makedirs(path.dirname(record), exist_ok=True)
-            writer = tf.python_io.TFRecordWriter(record)
+            writer = tf.io.TFRecordWriter(record)
 
             for file in files[idx]:
                 print(file)
@@ -53,7 +59,7 @@ class TFRecordWriter(object):
                             transform=None,
                             noise_type=None,
                             snr_list=(),
-                            target_sr=22050,
+                            target_sr=16000,
                             ):
 
         files = (self._train_files,
@@ -114,6 +120,73 @@ class TFRecordWriter(object):
         if transform is not None:
             engine.sess.close()
 
+    def write_audio_records_allsnrs(self,
+                            train_record_name,
+                            test_record_name,
+                            content_type=None,
+                            extension=None,
+                            transform=None,
+                            noise_type=None,
+                            snr_list=(),
+                            target_sr=16000,
+                            ):
+
+        files = (self._train_files,
+                 self._test_files,)
+
+        if transform is not None:
+            # build the graph with tf ops only once
+            # still sub-optimal since batch size will be one
+            engine = _build_audio_engine(target_sr=target_sr, transformation=transform)
+
+        # preload noise data
+        if len(snr_list) > 0:
+            noise_data = cache_noise(noise_type, sampling_rate=target_sr)
+        else:
+            noise_data = None
+            snr_list = ('clean', )
+
+        for idx, record in enumerate([train_record_name, test_record_name]):
+            makedirs(path.dirname(record), exist_ok=True)
+
+            record_name = path.join(record + '_allsnrs' + '.tfrecord', )
+            writer = tf.python_io.TFRecordWriter(record_name)
+
+            for file in files[idx]:
+                print(file)
+                sentence_id = self._label_map[file]
+
+                input_data = read_data_file(file, extension, sr=target_sr)
+
+                chunks = []
+                for snr_idx, snr in enumerate(snr_list):
+
+                    data = np.copy(input_data)  # safety first ? we don't have const in Python
+
+                    if snr is not 'clean':
+                        data = add_noise_cached(  # this is the function we don't trust
+                            orig_signal=data,
+                            noise_type=noise_type,
+                            noise_data=noise_data,
+                            snr=snr,)
+
+                    if transform is not None:
+                        transformed_data = apply_transform(data=data, transformation=transform, engine=engine)
+                    else:
+                        transformed_data = data
+
+                    chunks.append(transformed_data)
+
+                all_data = np.concatenate(chunks, axis=1)
+                example = make_input_example(sentence_id, all_data, content_type)
+
+                writer.write(example.SerializeToString())
+
+            writer.close()
+
+        if transform is not None:
+            engine.sess.close()
+
     def write_video_records(self,
                             train_record_name,
                             test_record_name,
@@ -145,7 +218,9 @@ class TFRecordWriter(object):
                           test_record_name,
                           bmp_dir,
                           output_resolution,
-                          crop_lips=False):
+                          crop_lips=False,
+                          append_aus=False
+                          ):
         r"""
 
         :param train_record_name:
@@ -169,9 +244,10 @@ class TFRecordWriter(object):
                 sentence_id = self._label_map[file]
                 feature_dir = path.join(bmp_dir, sentence_id) + '_aligned'
 
-                contents = read_bmp_dir(feature_dir, output_resolution, crop_lips)
+                contents = read_bmp_dir(feature_dir, output_resolution, crop_lips, append_aus=append_aus)
 
-                example = make_input_example(sentence_id, contents, 'video')
+                # example = make_input_example(sentence_id, contents, 'video')
+                example = make_video_example(sentence_id, frames=contents['video'], aus=contents['aus'])
                 writer.write(example.SerializeToString())
 
             writer.close()
@@ -251,7 +327,7 @@ def _bytes_feature_list(values_list):
 
 
 def read_data_file(file, extension, sr=None):
-    if extension in ('wav', 'mp4', 'WAV'):
+    if extension in ('wav', 'mp4', 'WAV', 'flac'):
         contents = read_wav_file(file + '.' + extension, sr=sr)
     else:
         raise Exception('unknown file type/extension')
@@ -329,14 +405,13 @@ def _build_audio_engine(target_sr, transformation):
             frame_length_msec=25,  # 25 > 20
             frame_step_msec=10,
             sample_rate=target_sr,
-            fft_length=1024,
-            mel_lower_edge_hz=80,
-            mel_upper_edge_hz=target_sr / 2,  # 11025 > 7600
+            mel_lower_edge_hz=125,
+            mel_upper_edge_hz=7600,  # 11025 > 7600
             num_mel_bins=30,  # 30 > 60 > 80
-            num_mfccs=26,  # 26 > 13
+            num_mfccs=80,  # 26 > 13
         )
 
-        features = process_audio(input_tensor, hparams_audio, logmel_only=('logmel' in transformation))
+        features = process_audio(input_tensor, hparams_audio, need_logmel=('logmel' in transformation))
 
     session_conf = tf.ConfigProto(
         device_count={'CPU': 1, 'GPU': 0},
@@ -383,7 +458,7 @@ def make_feature_example(sentence_id, inputs):
                                     context=context)
 
 
-def make_video_example(sentence_id, frames):
+def make_video_example(sentence_id, frames, aus=None):
 
     input_len = len(frames)
 
@@ -410,6 +485,14 @@ def make_video_example(sentence_id, frames):
     feature_list = {
         'inputs': tf.train.FeatureList(feature=input_features)
     }
+
+    if aus is not None:
+        aus_features = [
+            tf.train.Feature(float_list=tf.train.FloatList(value=au.flatten()))
+            for au in aus]
+
+        feature_list['aus'] = tf.train.FeatureList(feature=aus_features)
+
     feature_lists = tf.train.FeatureLists(feature_list=feature_list)
     return tf.train.SequenceExample(feature_lists=feature_lists,
                                     context=context)
@@ -423,7 +506,7 @@ def _add_extensions(filenames, extension):
     return [path.join(file + '.' + extension) for file in filenames]
 
 
-def read_bmp_dir(feature_dir, output_resolution, crop_lips=False):
+def read_bmp_dir(feature_dir, output_resolution, crop_lips=False, append_aus=False):
     files = sorted(glob.glob(feature_dir + '/*.bmp'))
     data = []
     for file in files:
@@ -445,6 +528,7 @@ def read_bmp_dir(feature_dir, output_resolution, crop_lips=False):
 
     video = np.asarray(data, dtype=np.float64)
 
+    # debug time
     # for frame in video:
     #     frame = cv2.resize(frame, (512, 256), interpolation=cv2.INTER_CUBIC)
     #     cv2.imshow('video_stream', (frame) / 255)
@@ -452,9 +536,68 @@ def read_bmp_dir(feature_dir, output_resolution, crop_lips=False):
 
     video = (video - 128) / 128
 
-    return video
+    out_dict = {'video': video, 'aus': None}
+
+    if append_aus is True:
+        csv = feature_dir.split('_aligned')[0] + '.csv'
+        aus = _read_aus_from_csv(csv)
+        out_dict['aus'] = aus
+
+    return out_dict
 
 
 def _stack_features(mat, window_len, stride):
     nrows = ((mat.shape[0]-window_len)//stride)+1
     return mat[stride*np.arange(nrows)[:, None] + np.arange(window_len)].reshape([nrows, -1])
+
+
+def _read_aus_from_csv(csv):
+    with open(csv, 'r') as f:
+        contents = f.read().splitlines()
+
+    header = contents[0].split(', ')
+
+    # potentially unused variables, kept for speedup
+    # au17_id = header.index('AU17_r')
+    au25_id = header.index('AU25_r')
+    au26_id = header.index('AU26_r')
+    aus = []
+
+    for line in contents[1:]:
+        values = line.split(', ')
+        # au17 = float(values[pose_Rx_id])
+        au25 = float(values[au25_id])
+        au26 = float(values[au26_id])
+        aus.append([au25, au26])
+
+    aus = np.asarray(aus)
+
+    return aus
+
+
+def _read_pose_from_csv(csv):
+    r"""
+    A function AVSR deserves, but not the one it needs right now
+    :param csv:
+    :return:
+    """
+    with open(csv, 'r') as f:
+        contents = f.read().splitlines()
+
+    header = contents[0].split(', ')
+    pose_Rx_id = header.index('pose_Rx')
+    pose_Ry_id = header.index('pose_Ry')
+    pose_Rz_id = header.index('pose_Rz')
+
+    pose = []
+    for line in contents[1:]:
+        values = line.split(', ')
+        pose_Rx = float(values[pose_Rx_id])
+        pose_Ry = float(values[pose_Ry_id])
+        pose_Rz = float(values[pose_Rz_id])
+
+        pose.append([pose_Rx, pose_Ry, pose_Rz])
+
+    pose = np.asarray(pose)
+
+    return pose
