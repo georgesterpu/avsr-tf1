@@ -1,30 +1,32 @@
 import tensorflow as tf
 
 
-def batch_norm_relu(inputs, is_training, data_format):
+def batch_norm_relu(inputs, is_training, data_format, name=None):
     r"""Performs a batch normalization followed by a ReLU."""
     # We set fused=True for a significant performance boost. See
     # https://www.tensorflow.org/performance/performance_guide#common_fused_ops
     inputs = tf.layers.batch_normalization(
         inputs=inputs, axis=1 if data_format == 'channels_first' else -1,
         epsilon=1e-5, momentum=0.98,
-        center=True, scale=True, training=is_training, fused=True)
-    inputs = tf.nn.relu(inputs)
+        center=True, scale=True, training=is_training, fused=True,
+        name=name+'_bn' if name is not None else name)
+    inputs = tf.nn.relu(inputs, name=name+'_relu' if name is not None else name)
     return inputs
 
 
-def conv2d_wrapper(inputs, filters, kernel_size, strides, data_format, padding='SAME', activation=None):
+def conv2d_wrapper(inputs, filters, kernel_size, strides, data_format, padding='SAME', activation=None, name=None):
     out =  tf.layers.conv2d(
         inputs=inputs,
         filters=filters,
         kernel_size=kernel_size,
         strides=strides,
         padding=padding,
-        use_bias=False,
+        use_bias=True,
         kernel_initializer=tf.variance_scaling_initializer(scale=2.0, mode='fan_in'),
         kernel_regularizer=tf.contrib.layers.l2_regularizer(scale=0.001),
         data_format=data_format,
-        activation=activation
+        activation=activation,
+        name=name
     )
     return out
 
@@ -44,15 +46,16 @@ def conv3d_wrapper(inputs, filters, kernel_size, strides, data_format, padding='
     )
 
 
-def projection_shortcut(inputs, filters, strides, data_format, padding='SAME'):
-    return conv2d_wrapper(inputs, filters, (1, 1), strides, data_format, padding=padding)
+def projection_shortcut(inputs, filters, strides, data_format, padding='SAME', name=None):
+    return conv2d_wrapper(inputs, filters, (1, 1), strides, data_format, padding=padding, name=name)
 
 
 def projection_shortcut_3d(inputs, filters, strides, data_format, padding='SAME'):
     return conv3d_wrapper(inputs, filters, (1, 1, 1), strides, data_format, padding=padding)
 
 
-def residual_block(inputs, filters, kernel_size, strides, data_format, is_training, project_shortcut=False, skip_bn=False):
+def residual_block(inputs, filters, kernel_size, strides, data_format, is_training,
+                   project_shortcut=False, skip_bn=False, name=None):
     r"""
     Each residual block contains two convolutions, performing the function:
     output = projection(input) + conv2(conv1(inputs))
@@ -74,16 +77,16 @@ def residual_block(inputs, filters, kernel_size, strides, data_format, is_traini
     shortcut = inputs
 
     if skip_bn is False:
-        inputs = batch_norm_relu(inputs, is_training, data_format)
+        inputs = batch_norm_relu(inputs, is_training, data_format, name=name+'_first')
 
     if project_shortcut is True:
-        shortcut = projection_shortcut(shortcut, filters, strides, data_format)
+        shortcut = projection_shortcut(shortcut, filters, strides, data_format, name=name+'_shortcut')
 
-    inputs = conv2d_wrapper(inputs, filters, kernel_size, strides, data_format)
-    inputs = batch_norm_relu(inputs, is_training, data_format)
-    inputs = conv2d_wrapper(inputs, filters, kernel_size, (1, 1), data_format)
+    inputs = conv2d_wrapper(inputs, filters, kernel_size, strides, data_format, name=name+'_conv1')
+    inputs = batch_norm_relu(inputs, is_training, data_format, name=name+'_second')
+    inputs = conv2d_wrapper(inputs, filters, kernel_size, (1, 1), data_format, name=name+'_conv2')
 
-    return inputs + shortcut
+    return tf.add(inputs, shortcut, name=name)
 
 
 def residual_block_3d(inputs, filters, kernel_size, strides, data_format, is_training, project_shortcut=False, skip_bn=False):
@@ -162,14 +165,17 @@ def resnet_cnn():
             flow = tf.transpose(inputs, [0, 3, 1, 2])
         else:
             flow = inputs
-        flow = conv2d_wrapper(flow, cnn_filters[0], (3, 3), (1, 1), data_format=data_format)
-        flow = batch_norm_relu(flow, is_training, data_format)
+        flow = conv2d_wrapper(flow, cnn_filters[0], (3, 3), (1, 1), data_format=data_format, name='layer0')
+        flow = batch_norm_relu(flow, is_training, data_format, name='layer0')
 
-        flow = tf.identity(flow)  # ??
-        flow = residual_block(flow, cnn_filters[0], (3, 3), (1, 1), data_format, is_training, project_shortcut=False, skip_bn=True)
+        flow = tf.identity(flow, name='identity')  # ??
+        flow = residual_block(flow, cnn_filters[0], (3, 3), (1, 1), data_format,
+                              is_training, project_shortcut=False, skip_bn=True,
+                              name='res_block_0')
 
         for layer_id, num_filters in enumerate(cnn_filters[1:]):
-            flow = residual_block(flow, num_filters, (3, 3), (2, 2), data_format, is_training, project_shortcut=True)
+            flow = residual_block(flow, num_filters, (3, 3), (2, 2), data_format, is_training, project_shortcut=True,
+                                  name='res_block_'+str(layer_id+1))
             # flow = residual_block(flow, num_filters, (3, 3), 1, data_format, is_training, project_shortcut=False)
             # flow = residual_block(flow, num_filters, (3, 3), 1, data_format, is_training, project_shortcut=False)
 
@@ -180,10 +186,10 @@ def resnet_cnn():
             kernel = flow.get_shape().as_list()[1:-1]
             squeeze_axis = [1, 2]
 
-        final = conv2d_wrapper(flow, cnn_dense_units, kernel, (1,1), data_format, 'VALID', tf.nn.relu)
+        final = conv2d_wrapper(flow, cnn_dense_units, kernel, (1,1), data_format, 'VALID', tf.nn.relu, name='flatten')
         final = tf.squeeze(final, axis=squeeze_axis)
 
-        final = tf.identity(final)  # ??
+        final = tf.identity(final, name='identity2')  # ??
         return final
 
     return model

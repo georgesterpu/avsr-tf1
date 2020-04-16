@@ -4,6 +4,7 @@ from .cells import build_rnn_layers
 from tensorflow.python.layers.core import Dense
 from tensorflow.python.ops import array_ops
 from tensorflow.contrib.rnn import LSTMStateTuple
+from .attention import add_attention
 
 
 class Seq2SeqBimodalDecoder(object):
@@ -100,7 +101,7 @@ class Seq2SeqBimodalDecoder(object):
                 cell_type=self._hparams.cell_type,
                 num_units_per_layer=self._hparams.decoder_units_per_layer,
                 use_dropout=self._hparams.use_dropout,
-                dropout_probability=self._hparams.dropout_probability,
+                dropout_probability=self._hparams.decoder_dropout_probability,
                 mode=self._mode,
                 dtype=self._hparams.dtype,
             )
@@ -113,7 +114,6 @@ class Seq2SeqBimodalDecoder(object):
 
             if self._mode == 'train':
                 self._build_decoder_train()
-                self._init_optimiser()
             else:
                 if self._hparams.decoding_algorithm == 'greedy':
                     self._build_decoder_greedy()
@@ -151,10 +151,10 @@ class Seq2SeqBimodalDecoder(object):
         else:
             final_audio_state = audio_state
 
-        state_tuple = (final_video_state, final_audio_state,)
+        state_tuple = (final_video_state, final_audio_state, )
 
-        self._decoder_initial_state = _project_state_tuple(
-            state_tuple, num_units=self._hparams.decoder_units_per_layer[0], cell_type=self._hparams.cell_type)
+        self._decoder_initial_state = _project_lstm_state_tuple(
+            state_tuple, num_units=self._hparams.decoder_units_per_layer[0])
 
         dec_layers = len(self._hparams.decoder_units_per_layer)
 
@@ -267,12 +267,14 @@ class Seq2SeqBimodalDecoder(object):
             output_layer=self._dense_layer,
         )
 
-        self._decoder_train_outputs, self._final_states, self._final_seq_lens = seq2seq.dynamic_decode(
+        self._basic_decoder_train_outputs, self._final_states, self._final_seq_lens = seq2seq.dynamic_decode(
             self._decoder_train,
             output_time_major=False,
             impute_finished=True,
             swap_memory=False,
         )
+
+        self._logits = self._basic_decoder_train_outputs.rnn_output
 
     def _build_decoder_greedy(self):
 
@@ -321,7 +323,7 @@ class Seq2SeqBimodalDecoder(object):
         self.inference_predicted_ids = outputs.sample_id
 
         if self._hparams.write_attention_alignment is True:
-            self.attention_summary = self._create_attention_alignments_summary(states, )
+            self.attention_summary = self._create_attention_alignments_summary(states)
 
     def _build_decoder_beam_search(self):
 
@@ -339,7 +341,7 @@ class Seq2SeqBimodalDecoder(object):
                 attention_mechanism=attention_mechanisms,
                 attention_layer_size=layer_sizes,
                 initial_cell_state=decoder_initial_state_tiled,
-                alignment_history=False,
+                alignment_history=self._hparams.write_attention_alignment,
                 output_attention=self._output_attention)
 
             initial_state = attention_cells.zero_state(
@@ -370,9 +372,13 @@ class Seq2SeqBimodalDecoder(object):
             maximum_iterations=self._hparams.max_label_length,
             swap_memory=False)
 
+        if self._hparams.write_attention_alignment is True:
+            self.attention_summary = self._create_attention_alignments_summary(states)
+
         self.inference_outputs = outputs.beam_search_decoder_output
         self.inference_predicted_ids = outputs.predicted_ids[:, :, 0]  # return the first beam
         self.inference_predicted_beam = outputs.predicted_ids
+        self.beam_search_output = outputs.beam_search_decoder_output
 
     def _create_attention_mechanism(self,
                                     attention_type,
@@ -439,82 +445,29 @@ class Seq2SeqBimodalDecoder(object):
         return attention_mechanism
 
     def _create_attention_alignments_summary(self, states):
-        attention_alignment = states.alignment_history.stack()
+        if self._hparams.decoding_algorithm == 'greedy':
+            video_alignment = states.alignment_history[0].stack()  # ordering is important
+            audio_alignment = states.alignment_history[-1].stack()
+        elif self._hparams.decoding_algorithm == 'beam_search':
+            video_alignment = states.cell_state.alignment_history[0]  # ordering is important
+            audio_alignment = states.cell_state.alignment_history[-1]
+        else:
+            raise ValueError('Unknown decoding algorithm')
 
-        attention_images = tf.expand_dims(tf.transpose(attention_alignment, [1, 2, 0]), -1)
-
-        # attention_images_scaled = tf.image.resize_images(1-attention_images, (256,128))
-        attention_images_scaled = 1 - attention_images
-
-        attention_summary = tf.summary.image("attention_images", attention_images_scaled,
+        video_images = tf.expand_dims(tf.transpose(video_alignment, [1, 2, 0]), -1)
+        video_images_scaled = 1 - video_images
+        video_summary = tf.summary.image("video_images", video_images_scaled,
                                              max_outputs=self._hparams.batch_size[1])
 
-        return attention_summary
+        audio_images = tf.expand_dims(tf.transpose(audio_alignment, [1, 2, 0]), -1)
+        audio_images_scaled = 1 - audio_images
+        audio_summary = tf.summary.image("audio_images", audio_images_scaled,
+                                         max_outputs=self._hparams.batch_size[1])
+
+        return video_summary, audio_summary
 
     def get_predictions(self):
         return self.inference_predicted_ids
-
-    def _init_optimiser(self):
-        r"""
-            Computes the batch_loss function to be minimised
-            :return:
-            """
-
-        self._loss_weights = tf.sequence_mask(
-            lengths=self._labels_len,
-            dtype=self._hparams.dtype
-        )
-
-        self.batch_loss = seq2seq.sequence_loss(
-            logits=self._decoder_train_outputs.rnn_output,
-            targets=self._labels,
-            weights=self._loss_weights)
-
-        reg_loss = 0
-
-        if self._hparams.recurrent_l2_regularisation is not None:
-            regularisable_vars = _get_trainable_vars(self._hparams.cell_type)
-            reg = tf.contrib.layers.l2_regularizer(scale=self._hparams.recurrent_l2_regularisation)
-            reg_loss = tf.contrib.layers.apply_regularization(reg, regularisable_vars)
-
-        if self._hparams.video_processing is not None:
-            if 'cnn' in self._hparams.video_processing:
-                #  we regularise the cnn vars by passing a regulariser in conv2d
-                reg_variables = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
-                reg_loss += tf.reduce_sum(reg_variables)
-
-        self.batch_loss = self.batch_loss + reg_loss
-
-        if self._hparams.optimiser == 'Adam':
-            optimiser = tf.train.AdamOptimizer(learning_rate=self._hparams.learning_rate, epsilon=1e-8)
-        elif self._hparams.optimiser == 'Momentum':
-            optimiser = tf.train.MomentumOptimizer(
-                learning_rate=self._hparams.learning_rate,
-                momentum=0.9,
-                use_nesterov=False)
-        elif self._hparams.optimiser == 'AMSGrad':
-            from .AMSGrad import AMSGrad
-            optimiser = AMSGrad(
-                learning_rate=self._hparams.learning_rate
-            )
-        else:
-            raise Exception('Unsupported Optimiser, try Adam')
-
-        variables = tf.trainable_variables()
-        gradients = tf.gradients(self.batch_loss, variables)
-
-        if self._hparams.clip_gradients is True:
-            gradients, _ = tf.clip_by_global_norm(gradients, self._hparams.max_gradient_norm)
-
-        if self._hparams.batch_normalisation is True:
-            update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-            with tf.control_dependencies(update_ops):
-                self.train_op = optimiser.apply_gradients(
-
-                    zip(gradients, variables), global_step=tf.train.get_global_step())
-        else:
-            self.train_op = optimiser.apply_gradients(
-                zip(gradients, variables))
 
 
 def _get_trainable_vars(cell_type):
@@ -537,27 +490,3 @@ def _project_lstm_state_tuple(state_tuple, num_units):
     projected_state = tf.contrib.rnn.LSTMStateTuple(c=proj_c, h=proj_h)
 
     return projected_state
-
-
-def _project_gru_state_tuple(state_tuple, num_units):
-
-    state_proj_layer = Dense(num_units, name='state_projection', use_bias=False)
-
-    cat = tf.concat([state for state in state_tuple], axis=-1)
-    projected_state = state_proj_layer(cat)
-
-    return projected_state
-
-
-def _project_state_tuple(state_tuple, num_units, cell_type):
-
-    if cell_type == 'lstm':
-        state = _project_lstm_state_tuple(state_tuple, num_units)
-    else:
-        try:
-            state = _project_gru_state_tuple(state_tuple, num_units)
-        except Exception:
-            print('Undefined state fusion behaviour for this cell type: {}'.format(cell_type))
-            raise
-
-    return state

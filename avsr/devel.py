@@ -2,7 +2,7 @@ from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import clip_ops
-
+from tensorflow import losses as losses, dtypes
 
 """
 The code here has not been tested thoroughly, use at your own risk
@@ -49,3 +49,20 @@ def mc_loss(labels, logits):
 
     cost = math_ops.reduce_sum(ce_loss, axis=1)
     return cost
+
+
+def smoothed_cross_entropy(num_classes, label_smoothing):
+    def _smoothed_cross_entropy(labels=None, logits=None,
+                                _label_smoothing=label_smoothing):
+        onehot_labels = array_ops.one_hot(labels, num_classes,
+                                          dtype=logits.dtype)
+        return losses.softmax_cross_entropy(onehot_labels, logits,
+                                            label_smoothing=_label_smoothing)
+    return _smoothed_cross_entropy
+
+
+def sentence_loss(labels, logits):
+    argmax_labels = math_ops.argmax_v2(logits, axis=1, output_type=labels.dtype)
+    perfect_match = math_ops.reduce_all(math_ops.equal(argmax_labels, labels))
+    loss = 1.0 - math_ops.cast(perfect_match, dtype=logits.dtype)
+    return loss

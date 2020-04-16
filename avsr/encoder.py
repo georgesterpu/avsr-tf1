@@ -1,9 +1,8 @@
 import tensorflow as tf
 import collections
-from .cells import build_rnn_layers, create_attention_mechanism
-from tensorflow.contrib import seq2seq
+from .cells import build_rnn_layers
 from tensorflow.contrib.rnn import MultiRNNCell
-
+from .attention import add_attention
 
 from tensorflow.python.layers.core import Dense
 
@@ -18,16 +17,22 @@ class Seq2SeqEncoder(object):
                  data,
                  mode,
                  hparams,
-                 num_units_per_layer
+                 num_units_per_layer,
+                 dropout_probability,
+                 **kwargs
                  ):
 
         self._data = data
         self._mode = mode
         self._hparams = hparams
         self._num_units_per_layer = num_units_per_layer
+        self._dropout_probability = dropout_probability
 
         self._init_data()
         self._init_encoder()
+
+        if kwargs.get('regress_aus', False) and mode == 'train':
+            self._init_au_loss()
 
     def _init_data(self):
         self._inputs = self._data.inputs
@@ -64,11 +69,12 @@ class Seq2SeqEncoder(object):
                     cell_type=self._hparams.cell_type,
                     num_units_per_layer=self._num_units_per_layer,
                     use_dropout=self._hparams.use_dropout,
-                    dropout_probability=self._hparams.dropout_probability,
+                    dropout_probability=self._dropout_probability,
                     mode=self._mode,
                     residual_connections=self._hparams.residual_encoder,
                     highway_connections=self._hparams.highway_encoder,
                     dtype=self._hparams.dtype,
+                    weight_sharing=self._hparams.encoder_weight_sharing,
                 )
 
                 self._encoder_outputs, self._encoder_final_state = tf.nn.dynamic_rnn(
@@ -87,7 +93,7 @@ class Seq2SeqEncoder(object):
                     cell_type=self._hparams.cell_type,
                     num_units_per_layer=self._num_units_per_layer,
                     use_dropout=self._hparams.use_dropout,
-                    dropout_probability=self._hparams.dropout_probability,
+                    dropout_probability=self._dropout_probability,
                     mode=self._mode,
                     dtype=self._hparams.dtype,
                 )
@@ -96,7 +102,7 @@ class Seq2SeqEncoder(object):
                     cell_type=self._hparams.cell_type,
                     num_units_per_layer=self._num_units_per_layer,
                     use_dropout=self._hparams.use_dropout,
-                    dropout_probability=self._hparams.dropout_probability,
+                    dropout_probability=self._dropout_probability,
                     mode=self._mode,
                     dtype=self._hparams.dtype,
                 )
@@ -110,7 +116,6 @@ class Seq2SeqEncoder(object):
                     parallel_iterations=self._hparams.batch_size[0 if self._mode == 'train' else 1],
                     swap_memory=False,
                     scope=scope,
-
                 )
 
                 self._encoder_outputs = tf.concat(bi_outputs, -1)
@@ -165,6 +170,24 @@ class Seq2SeqEncoder(object):
             pass
         return layer_inputs
 
+    def _init_au_loss(self):
+        encoder_output_layer = tf.layers.Dense(
+            units=2, activation=tf.nn.sigmoid,
+            )
+
+        projected_outputs = encoder_output_layer(self._encoder_outputs)
+        normed_aus = tf.clip_by_value(self._data.payload['aus'], 0.0, 3.0) / 3.0
+
+        mask = tf.sequence_mask(self._inputs_len, dtype=self._hparams.dtype)
+        mask = tf.expand_dims(mask, -1)
+        mask = tf.tile(mask, [1, 1, 2])
+
+        self.au_loss = tf.losses.mean_squared_error(
+            predictions=projected_outputs,
+            labels=normed_aus,
+            weights=mask
+        )
+
     def get_data(self):
 
         return EncoderData(
@@ -181,7 +204,8 @@ class AttentiveEncoder(Seq2SeqEncoder):
                  hparams,
                  num_units_per_layer,
                  attended_memory,
-                 attended_memory_length):
+                 attended_memory_length,
+                 dropout_probability):
         r"""
         Implements https://arxiv.org/abs/1809.01728
         """
@@ -194,6 +218,7 @@ class AttentiveEncoder(Seq2SeqEncoder):
             mode,
             hparams,
             num_units_per_layer,
+            dropout_probability
         )
 
     def _init_encoder(self):
@@ -206,32 +231,56 @@ class AttentiveEncoder(Seq2SeqEncoder):
                     cell_type=self._hparams.cell_type,
                     num_units_per_layer=self._num_units_per_layer,
                     use_dropout=self._hparams.use_dropout,
-                    dropout_probability=self._hparams.dropout_probability,
+                    dropout_probability=self._dropout_probability,
                     mode=self._mode,
                     as_list=True,
                     dtype=self._hparams.dtype)
 
-                attention_mechanism, output_attention = create_attention_mechanism(
-                    attention_type=self._hparams.attention_type[0][0],
+                self._encoder_cells = maybe_list(self._encoder_cells)
+
+                #### here weird code
+
+                # 1. reverse mem
+                # self._attended_memory = tf.reverse(self._attended_memory, axis=[1])
+
+                # 2. append zeros
+                # randval1 = tf.random.uniform(shape=[], minval=25, maxval=100, dtype=tf.int32)
+                # randval2 = tf.random.uniform(shape=[], minval=25, maxval=100, dtype=tf.int32)
+                # zeros_slice1 = tf.zeros([1, randval1, 256], dtype=tf.float32)  # assuming we use inference on a batch size of 1
+                # zeros_slice2 = tf.zeros([1, randval2, 256], dtype=tf.float32)
+                # self._attended_memory = tf.concat([zeros_slice1, self._attended_memory, zeros_slice2], axis=1)
+                # self._attended_memory_length += randval1 + randval2
+
+                # 3. blank mem
+                # self._attended_memory = 0* self._attended_memory
+
+                # 4. mix with noise
+                # noise = tf.random.truncated_normal(shape=tf.shape(self._attended_memory))
+                # noise = tf.random.uniform(shape=tf.shape(self._attended_memory))
+
+                # self._attended_memory = noise
+
+                #### here stop weird code
+
+                attention_cells, dummy_initial_state = add_attention(
+                    cells=self._encoder_cells[-1],
+                    attention_types=self._hparams.attention_type[0],
                     num_units=self._num_units_per_layer[-1],
                     memory=self._attended_memory,
-                    memory_sequence_length=self._attended_memory_length,
+                    memory_len=self._attended_memory_length,
                     mode=self._mode,
-                    dtype=self._hparams.dtype
-                )
-
-                attention_cells = seq2seq.AttentionWrapper(
-                    cell=self._encoder_cells[-1],
-                    attention_mechanism=attention_mechanism,
-                    attention_layer_size=self._hparams.decoder_units_per_layer[-1],
-                    alignment_history=self._hparams.write_attention_alignment,
-                    output_attention=output_attention,
+                    dtype=self._hparams.dtype,
+                    batch_size=tf.shape(self._inputs_len),
+                    write_attention_alignment=self._hparams.write_attention_alignment,
+                    fusion_type='linear_fusion',
                 )
 
                 self._encoder_cells[-1] = attention_cells
 
+                self._encoder_cells = maybe_multirnn(self._encoder_cells)
+
                 self._encoder_outputs, self._encoder_final_state = tf.nn.dynamic_rnn(
-                    cell=MultiRNNCell(self._encoder_cells),
+                    cell=self._encoder_cells,
                     inputs=encoder_inputs,
                     sequence_length=self._inputs_len,
                     parallel_iterations=self._hparams.batch_size[0 if self._mode == 'train' else 1],
@@ -241,28 +290,60 @@ class AttentiveEncoder(Seq2SeqEncoder):
                     )
 
                 if self._hparams.write_attention_alignment is True:
-                    self.attention_summary = self._create_attention_alignments_summary(self._encoder_final_state[-1])
+                    # self.weights_summary = self._encoder_final_state[-1].attention_weight_history.stack()
+                    self.attention_summary, self.attention_alignment = self._create_attention_alignments_summary(maybe_list(self._encoder_final_state)[-1])
 
     def _create_attention_alignments_summary(self, states):
         r"""
         Generates the alignment images, useful for visualisation/debugging purposes
         """
-        attention_alignment = states.alignment_history.stack()
+        attention_alignment = states.alignment_history[0].stack()
 
-        attention_images = tf.expand_dims(tf.transpose(attention_alignment, [1, 2, 0]), -1)
+        attention_alignment = tf.expand_dims(tf.transpose(attention_alignment, [1, 2, 0]), -1)
 
         # attention_images_scaled = tf.image.resize_images(1-attention_images, (256,128))
-        attention_images_scaled = 1 - attention_images
+        attention_images = 1 - attention_alignment
 
-        attention_summary = tf.summary.image("attention_images_cm", attention_images_scaled,
+        attention_summary = tf.summary.image("attention_images_cm", attention_images,
                                              max_outputs=self._hparams.batch_size[1])
 
-        return attention_summary
-
+        return attention_summary, attention_alignment
 
     def get_data(self):
 
+        def prepare_final_state(state):
+            r"""
+            state is a stack of zero or several RNN cells, followed by a final Attention wrapped RNN cell
+            """
+
+            from tensorflow.contrib.seq2seq.python.ops.attention_wrapper import AttentionWrapperState
+
+            final_state = []
+            if type(state) is tuple:
+                for cell in state:
+                    if type(cell) == AttentionWrapperState:
+                        final_state.append(cell.cell_state)
+                    else:
+                        final_state.append(cell)
+                return final_state
+            else:  # only one RNN layer of attention wrapped cells
+                return state.cell_state
+
         return EncoderData(
             outputs=self._encoder_outputs,
-            final_state=(self._encoder_final_state[:-1], self._encoder_final_state[-1].cell_state)
+            final_state=prepare_final_state(self._encoder_final_state)
         )
+
+
+def maybe_list(obj):
+    if type(obj) in (list, tuple):
+        return obj
+    else:
+        return [obj, ]
+
+
+def maybe_multirnn(lst):
+    if len(lst) == 1:
+        return lst[0]
+    else:
+        return MultiRNNCell(lst)
