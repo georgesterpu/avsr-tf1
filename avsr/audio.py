@@ -12,7 +12,6 @@ def compute_stfts(tensors, hparams):
         signals=tensors,
         frame_length=frame_length_samples,
         frame_step=frame_step_samples,
-        fft_length=hparams.fft_length,
     )
 
     return stfts
@@ -49,20 +48,20 @@ def compute_mfccs(log_mel_spectrograms, hparams):
     return mfccs
 
 
-def process_audio(tensors, hparams, logmel_only=False):
+def process_audio(tensors, hparams, need_logmel=False, need_mfcc=False):
     stfts = compute_stfts(tensors, hparams)
-    log_mel_spectrograms = compute_log_mel_spectrograms(stfts, hparams)
 
-    if logmel_only is False:
-        mfccs = compute_mfccs(log_mel_spectrograms, hparams)
-        feature = mfccs
-    else:
-        feature = log_mel_spectrograms
+    feature = stfts
+    if need_logmel is True:
+        feature = compute_log_mel_spectrograms(stfts, hparams)
+
+    if need_mfcc is True:
+        feature = compute_mfccs(feature, hparams)
 
     return feature
 
 
-def read_wav_file(file, sr=22050):
+def read_wav_file(file, sr=16000):
     r"""
     Loads wav files from disk and resamples to 22050 Hz
     The output is shaped as [timesteps, 1]
