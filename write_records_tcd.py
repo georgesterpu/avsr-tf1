@@ -28,7 +28,7 @@ def main():
 
     writer.write_labels_records(
         unit='character',
-        unit_list_file='/run/media/john_tukey/download/datasets/MV-LRS/misc/character_list',
+        unit_list_file='./avsr/misc/character_list',
         label_file='./datasets/tcdtimit/configs/character_labels',
         train_record_name='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords/characters_train_sd.tfrecord',
         test_record_name='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords/characters_test_sd.tfrecord',
@@ -38,11 +38,11 @@ def main():
         content_type='feature',
         extension='wav',
         transform='logmel_stack_w8s3',
-        # snr_list=[10, 0, -5],
-        target_sr=22050,
-        # noise_type='street',
-        train_record_name='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords/logmel_train_sd_stack',
-        test_record_name='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords/logmel_test_sd_stack',
+        snr_list=['clean', 10, 0, -5],
+        target_sr=16000,
+        noise_type='cafe',
+        train_record_name='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords/logmel_train_sd',
+        test_record_name='/run/media/john_tukey/download/datasets/tcdtimit/tfrecords/logmel_test_sd',
     )
 
     writer.write_bmp_records(
