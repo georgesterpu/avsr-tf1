@@ -498,23 +498,6 @@ class AVSR(object):
             wer, wer_dict = compute_wer(predictions_dict, labels_dict, split_words=True)
             error_rate['word'] = wer
 
-        if True:
-            sx_dict = dict()
-            si_dict = dict()
-            for (k, v) in predictions_dict.items():
-                if '/sx' in k:
-                    sx_dict[k] = v
-                elif '/si' in k:
-                    si_dict[k] = v
-                else:
-                    break
-                    # raise ValueError('aa')
-
-            si_err, _ = compute_wer(si_dict, labels_dict, split_words=False)
-            sx_err, _ = compute_wer(sx_dict, labels_dict, split_words=False)
-            error_rate['sx'] = sx_err
-            error_rate['si'] = si_err
-
         outdir = path.join('predictions', path.split(path.split(checkpoint_path)[0])[-1])
         makedirs(outdir, exist_ok=True)
         write_sequences_to_labelfile(predictions_dict,
