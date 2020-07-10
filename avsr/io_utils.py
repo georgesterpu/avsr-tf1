@@ -89,6 +89,7 @@ def make_iterator_from_one_record(data_record, label_record, unit_dict, batch_si
 
     input_shape, content_type = _get_input_shape_from_record(data_record)
     # unit = _get_unit_from_record(label_record)
+    has_aus = content_type.get('aus', False)
 
     dataset1 = tf.data.TFRecordDataset(data_record, num_parallel_reads=num_cores)
     dataset1 = dataset1.map(lambda proto: _parse_input_function(proto, input_shape, content_type), num_parallel_calls=num_cores)
@@ -110,11 +111,18 @@ def make_iterator_from_one_record(data_record, label_record, unit_dict, batch_si
         )
 
     def batching_fun(x):
+        if has_aus:
+            data_shape = (tf.TensorShape([None] + input_shape), tf.TensorShape([None, 2]), tf.TensorShape([]),
+                           tf.TensorShape([]))
+        else:
+            data_shape = (tf.TensorShape([None] + input_shape), tf.TensorShape([]), tf.TensorShape([]))
+
+        labels_shape = (tf.TensorShape([None]), tf.TensorShape([]), tf.TensorShape([]))
         return x.padded_batch(
             batch_size=batch_size,
             padded_shapes=(
-                (tf.TensorShape([None] + input_shape), tf.TensorShape([]), tf.TensorShape([])),  # input_shape is list
-                (tf.TensorShape([None]), tf.TensorShape([]), tf.TensorShape([]))                 # hence concatenated
+                data_shape,
+                labels_shape
             ), drop_remainder=False,
         )
 
@@ -123,9 +131,10 @@ def make_iterator_from_one_record(data_record, label_record, unit_dict, batch_si
     else:
 
         def key_func(arg1, arg2):
-            inputs_len = tf.shape(arg1[0])[0]
+            # inputs_len = tf.shape(arg1[0])[0]
+            inputs_len = arg1[-2]
             bucket_id = inputs_len // bucket_width
-            return tf.cast(bucket_id, dtype=tf.int64)
+            return bucket_id
 
         def reduce_func(unused_key, windowed_dataset):
             return batching_fun(windowed_dataset)
@@ -136,7 +145,13 @@ def make_iterator_from_one_record(data_record, label_record, unit_dict, batch_si
     dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
 
     iterator = dataset.make_initializable_iterator()
-    (inputs, inputs_len, fname1), (labels, labels_len, fname2) = iterator.get_next()
+
+    payload = {}
+    if has_aus:
+        (inputs, aus_inputs, inputs_len, fname1), (labels, labels_len, fname2) = iterator.get_next()
+        payload['aus'] = aus_inputs
+    else:
+        (inputs, inputs_len, fname1), (labels, labels_len, fname2) = iterator.get_next()
 
     return BatchedData(
         iterator_initializer=iterator.initializer,
@@ -146,7 +161,7 @@ def make_iterator_from_one_record(data_record, label_record, unit_dict, batch_si
         inputs_length=inputs_len,
         labels=labels,
         labels_length=labels_len,
-        payload=None,  # todo support AUs for single modality
+        payload=payload,
     )
 
 

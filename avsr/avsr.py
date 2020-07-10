@@ -582,6 +582,9 @@ class AVSR(object):
         inputs_length = tf.cast(iterator.inputs_length, tf.int32, name='inputs_len')
         labels_length = tf.cast(iterator.labels_length, tf.int32, name='labels_len')
 
+        if iterator.payload.get('aus', None) is not None:
+            iterator.payload['aus'] = tf.cast(iterator.payload['aus'], dtype=self._hparams.dtype, name='action_units')
+
         return BatchedData(
             inputs=inputs,
             inputs_length=inputs_length,
@@ -590,7 +593,7 @@ class AVSR(object):
             labels_length=labels_length,
             labels_filenames=iterator.labels_filenames,
             iterator_initializer=iterator.iterator_initializer,
-            payload=None)
+            payload=iterator.payload)
 
     def _parse_multimodal_iterator(self, iterator):
         vid_inputs = tf.cast(iterator.inputs[0], dtype=self._hparams.dtype, name='vid_inputs')

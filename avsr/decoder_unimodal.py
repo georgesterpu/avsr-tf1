@@ -133,8 +133,13 @@ class Seq2SeqUnimodalDecoder(object):
         enc_layers = len(self._hparams.encoder_units_per_layer[1])
         dec_layers = len(self._hparams.decoder_units_per_layer)
 
-        if enc_layers == 1:
-            encoder_state = [encoder_state, ]
+        # if enc_layers == 1:
+        #     encoder_state = [encoder_state, ]
+
+        # there is a difference between (state,) and tuple(state)
+        if type(encoder_state) is not tuple:
+            # we need to create a new list with one element
+            encoder_state = (encoder_state, )
 
         if dec_layers == 1:  # N - 1
             self._decoder_initial_state = encoder_state[-1]
