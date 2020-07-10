@@ -137,7 +137,7 @@ class Seq2SeqUnimodalDecoder(object):
         #     encoder_state = [encoder_state, ]
 
         # there is a difference between (state,) and tuple(state)
-        if type(encoder_state) is not tuple:
+        if type(encoder_state) not in (tuple, list):
             # we need to create a new list with one element
             encoder_state = (encoder_state, )
 

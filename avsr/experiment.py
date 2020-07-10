@@ -15,19 +15,19 @@ def run_experiment(
         learning_rates=None,
         logfile='tmp_experiment',
         warmup_epochs=0,
-        warmup_max_len=0,
+        warmup_max_len=50,
         input_modality='audio',
         **kwargs):
 
     full_logfile = path.join('./logs', logfile)
 
     ## warmup on short sentences
-    if warmup_epochs > 1:
+    if warmup_epochs >= 1:
         experiment = AVSR(
             unit=unit,
             unit_file=unit_list_file,
-            audio_train_record=audio_train_records[0],
-            audio_test_record=audio_test_records[0],
+            audio_train_record=audio_train_records[0] if input_modality != 'video' else None,
+            audio_test_record=audio_test_records[0] if input_modality != 'video' else None,
             video_train_record=video_train_record,
             video_test_record=video_test_record,
             labels_train_record=labels_train_record,
@@ -38,7 +38,8 @@ def run_experiment(
         )
 
         with open(full_logfile, 'a') as f:
-            f.write('Warm up on short sentences for {} epochs \n'.format(warmup_max_len))
+            f.write('Warm up on short sentences up to {} tokens for {} epochs \n'
+                    .format(warmup_max_len, warmup_epochs))
 
         experiment.train(
             logfile=full_logfile,
