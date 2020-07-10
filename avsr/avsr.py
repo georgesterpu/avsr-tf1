@@ -503,7 +503,8 @@ class AVSR(object):
         write_sequences_to_labelfile(predictions_dict,
                                      path.join(outdir, 'predicted_epoch_{}.mlf'.format(epoch)),
                                      labels_dict,
-                                     uer_dict)
+                                     uer_dict,
+                                     sep=' ' if self._unit == 'phoneme' else '')
         # from .analyse.analyse import plot_err_vs_seq_len, compute_uer_confusion_matrix
         # plot_err_vs_seq_len(labels_dict, uer_dict, 'tmp.pdf')
         # mat = compute_uer_confusion_matrix(predictions_dict=predictions_dict, labels_dict=labels_dict, unit_dict=self._unit_dict)
