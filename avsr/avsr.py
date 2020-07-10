@@ -154,7 +154,7 @@ class AVSR(object):
             batch_size=batch_size,
             video_processing=video_processing,
             audio_processing=audio_processing,
-            max_label_length={'viseme': 65, 'phoneme': 70, 'character': 500}[unit],  # max lens from tcdtimit
+            max_label_length={'viseme': 150, 'phoneme': 150, 'character': 150}[unit],  # max lens from tcdtimit
             max_sentence_length=max_sentence_length,
             batch_normalisation=batch_normalisation,
             instance_normalisation=instance_normalisation,
@@ -304,7 +304,7 @@ class AVSR(object):
             f.write('Average batch_loss as epoch {} is {}\n'.format(epoch, sum_loss / batches))
             f.flush()
 
-            if epoch % 5 == 0:
+            if epoch % 10 == 0:
                 save_path = self._train_model.model.saver.save(
                     sess=self._train_session,
                     save_path=checkpoint_path,
